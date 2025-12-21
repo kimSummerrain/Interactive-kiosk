@@ -1,15 +1,16 @@
-from flask import Flask, render_template, request, jsonify
+from src import create_app
+from flask import Flask, render_template
+from src.routes.order_routes import bp as order_bp
 
-app = Flask(__name__)
+app = create_app()
+app.register_blueprint(order_bp)
 
 @app.route("/")
 def index():
     return render_template("index.html")
 
-@app.route("/chat", methods=["POST"])
-def chat():
-    msg = request.json.get("message")
-    return jsonify({"reply": f"서버가 받은 메시지: {msg}"})
-
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8279, debug=True)
+    # Windows 환경에서 host/port를 명시하는 게 편함
+    
+    
+    app.run(host="0.0.0.0", port=5000, debug=True)

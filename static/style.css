@@ -1,0 +1,860 @@
+/* =========================================================
+   🎨 전역 변수(색/그림자/반경 등)
+   - 여기 값만 바꾸면 전체 톤이 한 번에 바뀜
+   ========================================================= */
+:root {
+  /* 화면(폰 배경) 크림색 */
+  --bg: #FBF4E6;
+
+  /* 상단 빨간 헤더 바 색 */
+  --top: #FF5252;
+
+  /* 카드(하얀 큰 박스) 배경색 */
+  --card: #FFFFFF;
+
+  /* 카드 테두리(아주 연한 회색/검정) */
+  --card-outline: rgba(0, 0, 0, .06);
+
+  /* 공통 그림자(카드가 떠보이게) */
+  --shadow: 0 10px 18px rgba(0, 0, 0, .18);
+
+  /* 공통 라운드(둥근 모서리) */
+  --radius: 18px;
+
+  /* 버튼 배경(베이지) */
+  --btn-bg: #F6D8B8;
+
+  /* (현재 코드에서는 직접 사용은 적지만) 버튼 바닥 그림자 느낌용 */
+  --btn-shadow: 0 6px 0 rgba(0, 0, 0, .18);
+
+  /* 기본 글자색(검정 계열) */
+  --ink: #111;
+
+  /* 강조 빨강(“주문은” 같은 텍스트) */
+  --red: #FF5252;
+
+  /* 얇은 선/테두리용(점선/입력창 테두리 등에 사용) */
+  --line: rgba(0, 0, 0, .10);
+}
+
+
+/* =========================================================
+   ✅ 기본 리셋/전역 폰트 설정
+   ========================================================= */
+* {
+  box-sizing: border-box;
+}
+
+/* width/height 계산을 예측 가능하게 */
+
+body {
+  margin: 0;
+  /* 기본 여백 제거 */
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans KR", Arial, sans-serif;
+  background: #fff;
+  /* 바깥 배경(페이지 전체) */
+}
+
+
+/* =========================================================
+   📱 전체 레이아웃 컨테이너
+   - 화면을 가운데 정렬하고, 위아래/좌우 여백을 줌
+   ========================================================= */
+.page {
+  display: flex;
+  justify-content: center;
+  /* 좌우 가운데 정렬 */
+  padding: 26px 10px;
+  /* 바깥 여백(위아래 26px, 좌우 10px) */
+  background: #fff;
+  /* 바깥 배경색 */
+}
+
+
+/* =========================================================
+   📦 폰(키오스크) 프레임
+   - 크림 배경 + 둥근 테두리 + 내부 패딩
+   - min-height로 화면이 너무 작아지지 않게 확보
+   ========================================================= */
+.phone {
+  width: 320px;
+  /* 전체 폭(폰 프레임 폭) */
+  background: var(--bg);
+  /* 크림 배경 */
+  border-radius: 18px;
+  /* 둥근 모서리 */
+  padding: 14px;
+  /* 폰 내부 여백 */
+
+  min-height: 600px;
+  /* 폰 프레임 최소 높이 */
+  display: flex;
+  flex-direction: column;
+  /* 위에서 아래로 쌓이게 */
+}
+
+
+/* =========================================================
+   🔴 상단 바(헤더)
+   - 제목이 가운데에 오도록 정렬
+   ========================================================= */
+.topbar {
+  height: 52px;
+  /* 상단바 높이 */
+  background: var(--top);
+  /* 빨간색 */
+  border-radius: 10px;
+  /* 둥근 모서리 */
+  box-shadow: 0 8px 14px rgba(0, 0, 0, .18);
+  /* 떠보이게 그림자 */
+  display: flex;
+  align-items: center;
+  /* 세로 가운데 */
+  justify-content: center;
+  /* 가로 가운데 */
+}
+
+/* 상단바 제목 텍스트(“고양이발바닥말랑말랑”) */
+.topbar__title {
+  color: #fff;
+  /* 흰색 글자 */
+  font-weight: 900;
+  /* 굵게 */
+  letter-spacing: -0.4px;
+  /* 자간 살짝 좁게 */
+  font-size: 16px;
+  /* 폰트 크기 */
+}
+
+
+/* =========================================================
+   🧾 카드(흰색 큰 박스)
+   - 첫 화면(주문 화면)에서 사용하는 기본 카드 스타일
+   ========================================================= */
+.card {
+  margin-top: 18px;
+  /* 상단바 아래 간격 */
+  background: var(--card);
+  /* 흰색 */
+  border-radius: var(--radius);
+  /* 둥근 모서리 */
+  border: 1px solid var(--card-outline);
+  /* 연한 테두리 */
+  box-shadow: var(--shadow);
+  /* 카드 그림자 */
+
+  min-height: 510px;
+  /* 카드 최소 높이 */
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  /* 위부터 쌓이게(아래로 밀지 않음) */
+
+  padding: 28px 18px 24px;
+  /* 카드 안쪽 여백(위/좌우/아래) */
+}
+
+
+/* =========================================================
+   🔤 큰 타이틀 영역(“주문은 / 여기서”)
+   - hero = 타이틀 블록
+   ========================================================= */
+.hero {
+  text-align: center;
+  /* 가운데 정렬 */
+  line-height: 1.02;
+  /* 줄 간격 촘촘하게 */
+  margin-top: 48px;
+  /* 카드 위쪽에서 얼마나 떨어질지 */
+  margin-bottom: 12px;
+  /* 아래 요소와 간격 */
+}
+
+/* 타이틀 공통 글자 스타일 */
+.hero__line {
+  font-weight: 900;
+  letter-spacing: -1px;
+}
+
+/* “주문은”(빨강) */
+.hero__line--red {
+  color: var(--red);
+  font-size: 60px;
+}
+
+/* “여기서”(검정) */
+.hero__line--black {
+  color: var(--ink);
+  font-size: 60px;
+}
+
+
+/* =========================================================
+   ℹ️ 설명 텍스트(“현금 주문은 카운터에서 해주세요”)
+   ========================================================= */
+.desc {
+  text-align: center;
+  margin: 8px 0 18px;
+  /* 위/아래 여백 */
+  color: #666;
+  /* 회색 글자 */
+  font-size: 12px;
+  /* 작은 크기 */
+}
+
+
+/* =========================================================
+   🟧 버튼 2개 영역(포장하기 / 먹고가기)
+   - actions: 버튼들을 가로로 배치하는 줄
+   ========================================================= */
+.actions {
+  display: flex;
+  /* 가로 배치 */
+  gap: 16px;
+  /* 버튼 사이 간격 */
+  justify-content: space-between;
+  margin-top: 60px;
+  /* 타이틀/설명과 버튼 사이 간격 */
+}
+
+/* 버튼 기본 스타일 */
+.btn {
+  flex: 1;
+  /* 버튼 2개가 같은 폭으로 늘어남 */
+  background: var(--btn-bg);
+  /* 베이지 */
+  border: none;
+  border-radius: 14px;
+  padding: 16px 0;
+  font-weight: 900;
+  font-size: 16px;
+  color: #111;
+  cursor: pointer;
+  box-shadow: 0 10px 14px rgba(0, 0, 0, .10);
+  /* 살짝 떠보이는 그림자 */
+}
+
+/* 버튼 눌렀을 때 살짝 눌리는 느낌 */
+.btn:active {
+  transform: translateY(1px);
+}
+
+
+/* =========================================================
+   🧩 (옵션) GUI 패널 영역
+   - 지금 화면에서 테스트용/관리자용 패널이 있다면 쓰는 영역
+   - panel, input, resultBox 등
+   ========================================================= */
+.panel {
+  margin-top: 18px;
+  /* 위 여백 */
+  padding-top: 14px;
+  /* 내부 위 여백 */
+  border-top: 1px dashed var(--line);
+  /* 점선 구분선 */
+}
+
+.panel__label {
+  font-weight: 900;
+  font-size: 12px;
+  color: #444;
+  margin-bottom: 8px;
+}
+
+.inputRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* 텍스트 입력창 */
+.input {
+  flex: 1;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  padding: 0 12px;
+  font-size: 14px;
+  outline: none;
+}
+
+
+
+/* 패널 안 “전송/확인” 같은 버튼 */
+.sendBtn {
+  height: 44px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  font-weight: 900;
+  background: #111;
+  color: #fff;
+}
+
+.sendBtn:active {
+  transform: translateY(1px);
+}
+
+/* 결과 표시 박스(출력 영역) */
+.resultBox {
+  margin-top: 10px;
+  min-height: 52px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  padding: 12px;
+  font-size: 13px;
+  color: #333;
+  background: #fafafa;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  /* 줄바꿈/공백 유지 */
+}
+
+
+/* =========================================================
+   🔙 뒤로가기 버튼이 있는 상단바 버전
+   - topbar--withBack: 상단바에 뒤로가기 버튼이 들어갈 때
+   ========================================================= */
+.topbar--withBack {
+  position: relative;
+  /* backBtn absolute 위치 기준 */
+  justify-content: center;
+  /* 제목을 가운데 유지 */
+
+  padding-left: 100px;
+  /* ✅ 뒤로가기 버튼 공간 확보 */
+  padding-right: 16px;
+  /* (선택) 오른쪽 여유 */
+}
+
+/* 실제 “뒤로가기” 버튼 */
+.backBtn {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 2px solid rgba(0, 0, 0, .15);
+  background: #fff;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, .12);
+}
+
+
+/* =========================================================
+   😺 얼굴 업로드 화면 전용 스타일
+   - card--face: 얼굴 화면에서 카드 크기/패딩 조절
+   - faceWrap: 베이지 바깥 박스(테두리/프레임 역할)
+   - faceBox: 가운데 흰색 박스(너가 크기 바꾸고 싶은 부분!)
+   ========================================================= */
+.card--face {
+  /* 얼굴 업로드 화면에서 카드 높이/패딩 설정 */
+  min-height: 510px;
+  /* 얼굴 화면 카드 최소 높이 */
+  padding: 10px 16px;
+  /* 얼굴 화면 카드 내부 여백 */
+}
+
+/* 베이지 프레임(흰 박스를 감싸는 바깥 박스) */
+.faceWrap {
+  margin-top: 26px;
+  /* 카드 상단에서 떨어진 정도 */
+  background: #F6D8B8;
+  /* 베이지 배경 */
+  border-radius: 18px;
+
+  /* ✅ 베이지 테두리 두께(이 padding이 두꺼울수록 “베이지 프레임”이 두꺼워짐) */
+  padding: 14px;
+
+  box-shadow: 0 10px 18px rgba(0, 0, 0, .18);
+  border: 1px solid rgba(0, 0, 0, .06);
+}
+
+/* ✅✅✅ 가운데 흰색 박스(너가 크기 조절하는 핵심) */
+.faceBox {
+  background: #fff;
+  border-radius: 20px;
+  border: 1px solid rgba(0, 0, 0, .08);
+
+  /* ✅ 여기 width/height가 “흰색 칸 크기”를 직접 결정 */
+  width: 225px;
+  /* 가로 */
+  height: 420px;
+  /* 세로 */
+  margin: 0 auto;
+  /* 가운데 정렬 */
+
+  /* 흰색 박스 안쪽 여백(글/아이콘/버튼이 자리 잡는 공간) */
+  padding: 24px 18px 18px;
+  text-align: center;
+
+  /* 흰 박스가 떠보이게 그림자 */
+  box-shadow: 0 10px 18px rgba(0, 0, 0, .12);
+
+  /* 내부 요소(텍스트/아이콘/버튼 등) 세로 정렬 */
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 10px;
+  /* 각 요소 사이 간격 */
+}
+
+/* 안내 문구 텍스트 */
+.faceText {
+  font-weight: 900;
+  font-size: 22px;
+  line-height: 1.25;
+  letter-spacing: -0.6px;
+  margin-bottom: 6px;
+  color: #111;
+}
+
+/* 얼굴 아이콘(SVG) 감싸는 영역 */
+.faceIcon {
+  display: flex;
+  justify-content: center;
+  margin: 4px 0 6px;
+}
+
+/* “사진 선택” 버튼 */
+.photoBtn {
+  background: #F6D8B8;
+  border: none;
+  border-radius: 14px;
+  padding: 14px 0;
+  width: 70%;
+  max-width: 220px;
+  margin: 0 auto;
+  font-weight: 900;
+  font-size: 18px;
+  cursor: pointer;
+  box-shadow: 0 8px 14px rgba(0, 0, 0, .15);
+}
+
+.photoBtn:active {
+  transform: translateY(1px);
+}
+
+/* 선택한 이미지 미리보기 박스 */
+.preview {
+  margin-top: 8px;
+  border-radius: 14px;
+  overflow: hidden;
+  /* 이미지가 둥근 모서리 밖으로 안 나가게 */
+  border: 1px solid rgba(0, 0, 0, .10);
+}
+
+.preview img {
+  width: 100%;
+  display: block;
+}
+
+/* =========================
+   화면 전환(한 파일에서 섹션 교체)
+   ========================= */
+.screen {
+  display: none;
+}
+
+.screen.active {
+  display: block;
+}
+
+/* (너가 SVG 스피너를 쓰고 있으니 CSS는 없어도 되지만
+   나중에 CSS 스피너로 바꾸고 싶으면 여기서 가능) */
+
+/* ✅ 결과 화면: 버튼을 아래로 보내기 */
+.faceBox--result {
+  justify-content: space-between;
+  /* 위=텍스트, 아래=버튼 */
+}
+
+/* 결과 화면 버튼 2개 정렬 */
+.resultActions {
+  display: flex;
+  gap: 12px;
+}
+
+.resultActions .photoBtn {
+  width: auto;
+  /* 기존 70% 때문에 줄어드는 것 방지 */
+  flex: 1;
+  /* 2개 버튼 같은 크기 */
+  max-width: none;
+  /* 최대폭 제한 해제 */
+}
+
+/* =========================
+   10~40대 메뉴 화면 스타일
+   ========================= */
+
+/* 탭바 */
+.menuTabs {
+  margin-top: 10px;
+  display: flex;
+  gap: 0;
+  border-bottom: 3px solid rgba(0, 0, 0, .08);
+}
+
+.tab {
+  flex: 1;
+  background: transparent;
+  border: none;
+  padding: 12px 0;
+  font-weight: 900;
+  cursor: pointer;
+  position: relative;
+}
+
+.tab.active::after {
+  content: "";
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: -3px;
+  height: 4px;
+  background: var(--top);
+  border-radius: 6px;
+}
+
+/* 메뉴 스크롤 영역 */
+.menuArea {
+  margin-top: 12px;
+  flex: 1;
+  overflow: auto;
+  padding-right: 6px;
+}
+
+
+/* 스크롤바(선택) */
+.menuArea::-webkit-scrollbar {
+  width: 6px;
+}
+
+.menuArea::-webkit-scrollbar-thumb {
+  background: rgba(255, 82, 82, .8);
+  border-radius: 999px;
+}
+
+.menuArea::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, .05);
+}
+
+/* 3열 그리드 */
+.menuGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+  padding: 6px 8px 120px;
+  /* 아래 결제바 공간 */
+}
+
+.menuItem {
+  text-align: left;
+}
+
+.menuThumb {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 14px;
+  background: #F6D8B8;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+}
+
+.menuName {
+  margin-top: 8px;
+  font-weight: 900;
+  font-size: 14px;
+}
+
+.menuPrice {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #444;
+}
+
+/* 하단 결제바 */
+.payBar {
+  position: sticky;
+  bottom: 0;
+
+  height: 140px;          
+  max-height: 140px;
+
+  margin-top: 10px;
+  background: rgba(255, 255, 255, .85);
+  backdrop-filter: blur(6px);
+  border-top: 1px solid rgba(0, 0, 0, .08);
+  border-radius: 18px;
+  padding: 12px;
+  box-shadow: 0 -8px 18px rgba(0, 0, 0, .10);
+  display: flex;
+  gap: 12px;
+}
+
+.payLeft {
+  flex: 1.2;
+
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+
+  max-height: 100%;        
+  overflow-y: auto;        
+  padding-right: 4px;      
+}
+
+.cartRow {
+  display: flex;
+  flex-direction: column;      
+  align-items: flex-start;     
+  gap: 6px;                    
+}
+
+.cartName {
+  font-weight: 900;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.qty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.qtyBtn {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: none;
+  background: rgba(0, 0, 0, .08);
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.qtyNum {
+  min-width: 34px;
+  text-align: center;
+  padding: 4px 8px;
+  border-radius: 10px;
+  background: #F6D8B8;
+  font-weight: 900;
+}
+
+.payRight {
+  flex: .9;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 6px;
+}
+
+.payTotalLabel {
+  font-weight: 900;
+  font-size: 13px;
+}
+
+.payTotal {
+  font-weight: 900;
+  font-size: 22px;
+}
+
+.payBtn {
+  width: 120px;
+  border: none;
+  border-radius: 12px;
+  padding: 12px 0;
+  background: var(--top);
+  color: #fff;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 8px 14px rgba(0, 0, 0, .15);
+}
+
+/* =========================
+   결제수단 선택 화면
+   ========================= */
+.payTitle {
+  margin-top: 16px;
+  text-align: center;
+  font-weight: 900;
+  font-size: 26px;
+  letter-spacing: -0.8px;
+}
+
+.payList {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 0 10px;
+}
+
+/* 옵션 카드(버튼) */
+.payOption {
+  width: 100%;
+  border: none;
+  background: #fff;
+  border-radius: 18px;
+  padding: 22px 18px;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 10px 18px rgba(0, 0, 0, .16);
+  border: 1px solid rgba(0, 0, 0, .06);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.payOption__big {
+  font-weight: 900;
+  font-size: 44px;
+  letter-spacing: -1px;
+}
+
+.payOption__desc {
+  font-size: 12px;
+  line-height: 1.35;
+  color: #333;
+  text-align: right;
+  white-space: pre-line;
+}
+
+.payOption:active {
+  transform: translateY(1px);
+}
+
+/* =========================
+   주문 완료 화면
+   ========================= */
+.card--complete {
+  min-height: 510px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+}
+
+.completeBox {
+  width: 100%;
+  background: #fff;
+  border-radius: 18px;
+  border: 1px solid rgba(0, 0, 0, .06);
+  box-shadow: 0 10px 18px rgba(0, 0, 0, .18);
+  padding: 70px 18px 40px;
+  text-align: center;
+}
+
+.completeText {
+  font-weight: 900;
+  font-size: 34px;
+  line-height: 1.2;
+  letter-spacing: -1px;
+  margin-bottom: 50px;
+}
+
+/* =========================
+   50대 이상: 따뜻/차가운 선택 화면
+   ========================= */
+.card--warmcold {
+  min-height: 510px;
+  padding: 18px 12px;
+  background: transparent;
+  box-shadow: none;
+  border: none;
+}
+
+.warmcoldWrap {
+  margin-top: 10px;
+  background: rgba(0, 0, 0, .04);
+  border-radius: 10px;
+  padding: 26px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.warmcoldCard {
+  width: 100%;
+  border: none;
+  background: #F6D8B8;
+  /* 베이지 바깥 */
+  border-radius: 18px;
+  padding: 18px;
+  cursor: pointer;
+}
+
+.warmcoldInner {
+  background: #fff;
+  /* 흰색 안쪽 */
+  border-radius: 16px;
+  height: 150px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10px 18px rgba(0, 0, 0, .18);
+  border: 1px solid rgba(0, 0, 0, .06);
+}
+
+.warmcoldText {
+  font-weight: 900;
+  font-size: 44px;
+  letter-spacing: -1px;
+}
+
+.warmcoldCard:active {
+  transform: translateY(1px);
+}
+
+/* =========================
+   따뜻/차가운 메뉴 화면(2탭 + 2열)
+   ========================= */
+
+/* 2열 그리드 */
+.menuGrid--two {
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+  padding: 6px 10px 140px;
+  /* 아래 결제바 공간 더 */
+}
+
+/* 사진처럼 결제바 오른쪽 버튼 크게 */
+.payBar--bigPay {
+  gap: 14px;
+  align-items: stretch;
+}
+
+.paySumRow {
+  margin-top: 6px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.paySumLabel {
+  font-weight: 900;
+  font-size: 12px;
+  color: #222;
+}
+
+.paySumValue {
+  font-weight: 900;
+  font-size: 22px;
+}
+
+.payBtn--big {
+  width: 140px;
+  border-radius: 16px;
+  font-size: 20px;
+  padding: 18px 0;
+}
