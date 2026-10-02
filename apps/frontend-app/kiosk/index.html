@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#193d33" />
+    <title>말랑 카페 · 키오스크</title>
+    <link rel="stylesheet" href="/kiosk-static/style.css" />
+    <script src="/kiosk-static/app.js" defer></script>
+  </head>
+  <body>
+    <div class="kiosk">
+      <header class="topbar">
+        <a class="brand" href="/kiosk" aria-label="처음으로"
+          ><span class="brand-mark">m.</span
+          ><span>말랑 카페<small>고양이개발바닥말랑말랑</small></span></a
+        ><span class="service-label">SELF ORDER</span>
+      </header>
+      <main>
+        <section
+          class="screen active"
+          id="screen-order"
+          aria-labelledby="welcome-title"
+        >
+          <div class="start-content">
+            <p class="eyebrow">어서 오세요</p>
+            <h1 id="welcome-title" tabindex="-1">어디에서 드시나요?</h1>
+            <p class="intro">이용 방법을 선택하면 주문을 시작해요.</p>
+            <div class="order-options">
+              <button class="order-option" id="btnEathere" type="button">
+                <svg viewBox="0 0 100 100" aria-hidden="true">
+                  <path
+                    d="M22 35h48v28a20 20 0 0 1-20 20h-8a20 20 0 0 1-20-20zM70 40h8a12 12 0 0 1 0 24h-8M17 90h62M35 23V10m18 13V10"
+                  /></svg
+                ><strong>매장 이용</strong><small>매장에서 마실게요</small>
+              </button>
+              <button class="order-option" id="btnTakeout" type="button">
+                <svg viewBox="0 0 100 100" aria-hidden="true">
+                  <path
+                    d="M22 30h56l-7 58H29zM18 22h64v8H18zM29 22l4-12h34l4 12M26 48h48M29 68h42"
+                  /></svg
+                ><strong>포장 주문</strong><small>가지고 갈게요</small>
+              </button>
+            </div>
+            <p class="hint">현금 결제와 주문 도움은 카운터에 문의해 주세요.</p>
+            <p class="notice" id="start-error" role="alert" hidden></p>
+          </div>
+        </section>
+        <section
+          class="screen"
+          id="screen-face"
+          aria-labelledby="face-title"
+          hidden
+        >
+          <button class="backBtn" data-back="menu" type="button">
+            ← 메뉴로 돌아가기
+          </button>
+          <div class="center-card">
+            <p class="eyebrow">선택 서비스</p>
+            <h1 id="face-title" tabindex="-1">사진으로 메뉴 추천받기</h1>
+            <p class="intro">
+              연령대와 날씨를 참고해 메뉴를 추천해요.<br />사진 없이 일반
+              메뉴로도 주문할 수 있어요.
+            </p>
+            <div class="portrait-icon" aria-hidden="true">☺</div>
+            <input id="fileInput" type="file" accept="image/*" hidden /><button
+              class="primary"
+              id="btnPick"
+              type="button"
+            >
+              사진 선택
+            </button>
+            <p class="hint">얼굴이 잘 보이는 이미지 · 최대 10MB</p>
+            <p class="notice" id="face-error" role="alert" hidden></p>
+          </div>
+        </section>
+        <section
+          class="screen"
+          id="screen-loading"
+          aria-labelledby="loading-title"
+          hidden
+        >
+          <button class="backBtn" data-back="cancel" type="button">
+            ← 취소
+          </button>
+          <div class="center-card">
+            <div class="spinner" aria-hidden="true"></div>
+            <h1 id="loading-title" tabindex="-1">메뉴를 추천하고 있어요</h1>
+            <p class="intro">잠시만 기다려 주세요.</p>
+          </div>
+        </section>
+        <section
+          class="screen"
+          id="screen-menu"
+          aria-labelledby="menu-title"
+          hidden
+        >
+          <div class="menu-heading">
+            <div>
+              <p class="eyebrow" id="order-mode">매장 주문</p>
+              <h1 id="menu-title" tabindex="-1">메뉴를 선택해 주세요</h1>
+            </div>
+            <div class="menu-tools">
+              <button class="text-button" id="btnRecommend" type="button">
+                사진 추천</button
+              ><button
+                class="text-button"
+                id="btnLarge"
+                type="button"
+                aria-pressed="false"
+              >
+                큰 글씨
+              </button>
+            </div>
+          </div>
+          <nav class="menuTabs" aria-label="메뉴 종류">
+            <button
+              class="tab active"
+              data-category="coffee"
+              aria-pressed="true"
+              type="button"
+            >
+              커피 · 라떼</button
+            ><button
+              class="tab"
+              data-category="smoothie"
+              aria-pressed="false"
+              type="button"
+            >
+              스무디</button
+            ><button
+              class="tab"
+              data-category="tea"
+              aria-pressed="false"
+              type="button"
+            >
+              티
+            </button>
+          </nav>
+          <div class="menu-browser">
+            <div class="menuGrid" id="menu-grid"></div>
+          </div>
+          <aside class="cart-panel" aria-label="담은 메뉴">
+            <div class="cart-heading">
+              <h2>담은 메뉴 <span id="cart-count">0</span></h2>
+              <button class="text-button" id="btnClear" type="button">
+                전체 비우기
+              </button>
+            </div>
+            <div class="cart-items" id="cart-items"></div>
+            <div class="cart-summary">
+              <div class="total-row">
+                <span>총 주문 금액</span
+                ><strong id="cart-total" aria-live="polite">0원</strong>
+              </div>
+              <button class="primary" id="btnPay" type="button" disabled>
+                주문하기 →
+              </button>
+            </div>
+          </aside>
+        </section>
+        <section
+          class="screen"
+          id="screen-paymethod"
+          aria-labelledby="pay-title"
+          hidden
+        >
+          <button class="backBtn" data-back="menu" type="button">
+            ← 메뉴로 돌아가기
+          </button>
+          <div class="center-card">
+            <p class="eyebrow">주문 확인</p>
+            <h1 id="pay-title" tabindex="-1">결제 방법을 선택해 주세요</h1>
+            <p class="intro" id="payment-summary"></p>
+            <div class="pay-options">
+              <button class="pay-option" id="optCard" type="button">
+                <span aria-hidden="true">▤</span><strong>카드</strong
+                ><small>카운터에서 결제</small></button
+              ><button class="pay-option" id="optVoucher" type="button">
+                <span aria-hidden="true">▧</span><strong>상품권</strong
+                ><small>카운터에서 확인</small>
+              </button>
+            </div>
+            <p class="hint">
+              지금은 주문만 접수돼요. 결제는 카운터에서 진행해 주세요.
+            </p>
+            <p class="notice" id="payment-error" role="alert" hidden></p>
+            <p id="payment-status" role="status"></p>
+          </div>
+        </section>
+        <section
+          class="screen"
+          id="screen-complete"
+          aria-labelledby="complete-title"
+          hidden
+        >
+          <div class="center-card">
+            <div class="success-icon" aria-hidden="true">✓</div>
+            <h1 id="complete-title" tabindex="-1">주문이 접수되었어요</h1>
+            <p class="intro">주문 번호</p>
+            <strong class="receipt-number" id="order-number"></strong>
+            <p class="intro">
+              카운터에서 결제해 주세요.<br />주문 번호로 안내해 드릴게요.
+            </p>
+            <button class="primary" id="btnGoHome" type="button">
+              처음으로
+            </button>
+          </div>
+        </section>
+      </main>
+      <footer class="app-footer">
+        <span>화면을 눌러 주문해 주세요</span
+        ><span>도움이 필요하면 직원을 불러 주세요</span>
+      </footer>
+    </div>
+    <dialog id="reset-dialog">
+      <h2>처음으로 돌아갈까요?</h2>
+      <p>담은 메뉴가 모두 비워져요.</p>
+      <div class="dialog-actions">
+        <button class="text-button" id="btnKeepOrder" type="button">
+          계속 주문</button
+        ><button class="primary" id="btnResetOrder" type="button">
+          처음으로
+        </button>
+      </div>
+    </dialog>
+    <div
+      class="sr-only"
+      id="announcement"
+      role="status"
+      aria-live="polite"
+    ></div>
+    <noscript>JavaScript를 활성화해 주세요.</noscript>
+  </body>
+</html>

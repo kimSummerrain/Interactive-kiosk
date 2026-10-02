@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>말랑 카페 · 관리자</title>
+    <link rel="stylesheet" href="/admin-static/style.css" />
+    <script src="/admin-static/app.js" defer></script>
+  </head>
+  <body>
+    <section id="login-screen" class="login-screen">
+      <form id="login-form" class="login-card">
+        <div class="logo">m.</div>
+        <p class="eyebrow">MALLANG CAFE · ADMIN</p>
+        <h1>매장 관리</h1>
+        <p class="muted">주문과 판매 현황을 확인하세요.</p>
+        <label
+          >관리자 아이디<input
+            id="username"
+            name="username"
+            autocomplete="username"
+            value="admin"
+            required /></label
+        ><label
+          >비밀번호<input
+            id="password"
+            name="password"
+            type="password"
+            autocomplete="current-password"
+            required /></label
+        ><button class="primary" id="login-button">로그인</button>
+        <p class="error" id="login-error" role="alert" hidden></p>
+      </form>
+    </section>
+    <div id="dashboard" class="dashboard" hidden>
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="logo">m.</span
+          ><span>말랑 카페<small>매장 관리자</small></span>
+        </div>
+        <p class="nav-label">매장 운영</p>
+        <nav aria-label="관리 메뉴">
+          <button
+            data-view="orders"
+            class="nav-button active"
+            aria-pressed="true"
+          >
+            ▤ &nbsp; 주문 관리</button
+          ><button data-view="sales" class="nav-button" aria-pressed="false">
+            ▥ &nbsp; 판매내역
+          </button>
+        </nav>
+        <div class="sidebar-bottom">
+          <span id="admin-name"></span
+          ><button id="logout" class="secondary">로그아웃</button>
+        </div>
+      </aside>
+      <main class="workspace">
+        <header class="page-heading">
+          <div>
+            <p class="eyebrow">STORE OVERVIEW</p>
+            <h1 id="page-title">주문 관리</h1>
+            <p class="muted" id="page-description">
+              접수된 주문과 진행 상태를 확인하세요.
+            </p>
+          </div>
+          <button id="refresh" class="secondary">↻ 새로고침</button>
+        </header>
+        <form id="filter-form" class="filter-bar">
+          <label>시작일<input id="start-date" type="date" required /></label
+          ><span aria-hidden="true">—</span
+          ><label>종료일<input id="end-date" type="date" required /></label
+          ><label id="status-filter"
+            >주문 상태<select id="status">
+              <option value="">전체 상태</option>
+              <option value="pending">접수</option>
+              <option value="preparing">준비 중</option>
+              <option value="completed">완료</option>
+              <option value="cancelled">취소</option>
+            </select></label
+          ><button class="primary">조회</button
+          ><span class="period-note">한국 시간 기준</span>
+        </form>
+        <p class="error" id="dashboard-error" role="alert" hidden></p>
+        <p id="load-status" class="muted" role="status"></p>
+        <div class="metrics">
+          <article>
+            <span>결제 확인 매출</span><strong id="revenue">0원</strong
+            ><small>결제 완료 주문 기준</small>
+          </article>
+          <article>
+            <span>전체 주문</span><strong id="order-count">0건</strong
+            ><small id="paid-count">결제 완료 0건</small>
+          </article>
+          <article>
+            <span>진행 중</span><strong id="pending-count">0건</strong
+            ><small>접수 · 준비 중</small>
+          </article>
+          <article>
+            <span>취소 주문</span><strong id="cancelled-count">0건</strong
+            ><small>매출 집계 제외</small>
+          </article>
+        </div>
+        <section id="orders-view" class="panel">
+          <div class="panel-heading">
+            <h2>주문 목록</h2>
+            <span class="muted" id="list-count">0건</span>
+          </div>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>주문 번호</th>
+                  <th>접수 시간</th>
+                  <th>메뉴</th>
+                  <th>이용 방법</th>
+                  <th>금액</th>
+                  <th>결제</th>
+                  <th>상태</th>
+                  <th>상세</th>
+                </tr>
+              </thead>
+              <tbody id="order-rows"></tbody>
+            </table>
+          </div>
+          <div class="pagination">
+            <button class="secondary" id="prev">← 이전</button
+            ><span id="page-number">1 / 1</span
+            ><button class="secondary" id="next">다음 →</button>
+          </div>
+        </section>
+        <section id="sales-view" hidden>
+          <p class="sales-note">
+            주문 접수일 기준 · 관리자가 결제 확인한 주문만 매출에 포함됩니다.
+          </p>
+          <div class="sales-grid">
+            <article class="panel">
+              <div class="panel-heading"><h2>일별 판매내역</h2></div>
+              <div class="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>날짜</th>
+                      <th>결제 주문</th>
+                      <th>매출</th>
+                    </tr>
+                  </thead>
+                  <tbody id="daily-rows"></tbody>
+                </table>
+              </div>
+            </article>
+            <article class="panel">
+              <div class="panel-heading"><h2>메뉴별 판매량 TOP 10</h2></div>
+              <div class="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>메뉴</th>
+                      <th>판매 수량</th>
+                      <th>매출</th>
+                    </tr>
+                  </thead>
+                  <tbody id="menu-rows"></tbody>
+                </table>
+              </div>
+            </article>
+          </div>
+        </section>
+      </main>
+    </div>
+    <dialog id="order-dialog">
+      <div class="dialog-heading">
+        <h2 id="detail-title">주문 상세</h2>
+        <button id="close-detail" class="secondary" aria-label="주문 상세 닫기">
+          닫기
+        </button>
+      </div>
+      <p id="detail-meta" class="muted"></p>
+      <div id="detail-items"></div>
+      <div class="detail-total">
+        <span>주문 금액</span><strong id="detail-total"></strong>
+      </div>
+      <p id="detail-state"></p>
+      <p class="error" id="detail-error" role="alert" hidden></p>
+      <div id="detail-actions" class="detail-actions"></div>
+      <p class="muted detail-note">
+        결제 확인은 카운터에서 실제 결제를 확인한 후 처리하세요. 결제 완료
+        주문의 환불은 이 화면에서 지원하지 않습니다.
+      </p>
+    </dialog>
+  </body>
+</html>
