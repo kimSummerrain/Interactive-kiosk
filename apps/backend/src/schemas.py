@@ -83,9 +83,13 @@ class MenuUpdate(BaseModel):
     price: Optional[int] = Field(default=None, strict=True, ge=0, le=1000000)
     available: Optional[bool] = Field(default=None, strict=True)
     stock: Optional[int] = Field(default=None, strict=True, ge=0, le=1000000)
+    stock_note: Optional[str] = Field(default=None, min_length=1, max_length=300)
 
     @model_validator(mode="after")
     def valid_update(self):
+        if "stock_note" in self.model_fields_set:
+            if "stock" not in self.model_fields_set or not (self.stock_note or "").strip():
+                raise ValueError("조정 사유는 stock 변경과 함께 입력하세요.")
         if not self.model_fields_set or any(getattr(self, k) is None for k in self.model_fields_set if k != "stock"):
             raise ValueError("변경할 값을 입력하세요. stock의 null만 무제한을 의미합니다.")
         return self
@@ -183,3 +187,23 @@ class HourlySales(BaseModel):
     menu_id: Optional[str]
     totals: HourlyMetrics
     hours: List[SalesHour]
+
+
+StockReason = Literal["order", "cancel", "owner_adjustment"]
+
+
+class StockMovement(BaseModel):
+    id: int
+    menu_id: str
+    order_id: Optional[int]
+    delta: int
+    reason: StockReason
+    note: str
+    created_at: datetime
+
+
+class StockMovementList(BaseModel):
+    movements: List[StockMovement]
+    total: int
+    page: int
+    page_size: int

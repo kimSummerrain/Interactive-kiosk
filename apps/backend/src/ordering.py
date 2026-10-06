@@ -44,6 +44,9 @@ def initialize_catalog(db):
         order_id INTEGER REFERENCES orders(id), delta INTEGER NOT NULL,
         reason TEXT NOT NULL, created_at TEXT NOT NULL,
         UNIQUE(order_id,menu_id,reason))""")
+    if "note" not in {row[1] for row in db.execute("PRAGMA table_info(stock_movements)")}:
+        db.execute("ALTER TABLE stock_movements ADD COLUMN note TEXT NOT NULL DEFAULT ''")
+    db.execute("CREATE INDEX IF NOT EXISTS stock_movements_menu_time ON stock_movements(menu_id,created_at)")
 
 
 class CatalogMixin:
@@ -65,6 +68,7 @@ class CatalogMixin:
 
     def update_menu(self, menu_id, payload):
         changes = payload.model_dump(exclude_unset=True)
+        note = (changes.pop("stock_note", None) or "").strip()
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             if not db.execute("SELECT 1 FROM menus WHERE menu_id=?", (menu_id,)).fetchone():
@@ -73,12 +77,34 @@ class CatalogMixin:
                 before = db.execute("SELECT stock FROM menus WHERE menu_id=?", (menu_id,)).fetchone()[0]
                 after = changes["stock"]
                 if before is not None and after is not None:
-                    db.execute("""INSERT INTO stock_movements(menu_id,delta,reason,created_at)
-                        VALUES (?,?,?,?)""", (menu_id, after-before, "owner_adjustment",
-                                              datetime.now(timezone.utc).isoformat()))
+                    if before != after:
+                        db.execute("""INSERT INTO stock_movements(menu_id,delta,reason,created_at,note)
+                            VALUES (?,?,?,?,?)""", (menu_id, after-before, "owner_adjustment",
+                                                   datetime.now(timezone.utc).isoformat(), note))
+                elif note:
+                    self.error(422, "수량 제한 전환에는 조정 사유를 기록할 수 없습니다. 유한 수량 조정 시 입력하세요.")
             db.execute(f"UPDATE menus SET {','.join(k+'=?' for k in changes)} WHERE menu_id=?",
                        [*changes.values(), menu_id])
         return next(m for m in self.menus() if m["menu_id"] == menu_id)
+
+    def stock_history(self, start, end, menu_id, reason, page, page_size):
+        from src.storage import KST
+        first = datetime.combine(start, datetime.min.time(), tzinfo=KST).astimezone(timezone.utc)
+        last = datetime.combine(end + timedelta(days=1), datetime.min.time(), tzinfo=KST).astimezone(timezone.utc)
+        where, params = "created_at >= ? AND created_at < ?", [first.isoformat(), last.isoformat()]
+        if menu_id is not None:
+            where += " AND menu_id=?"
+            params.append(menu_id)
+        if reason is not None:
+            where += " AND reason=?"
+            params.append(reason)
+        with self.connect() as db:
+            db.execute("BEGIN")
+            count = db.execute(f"SELECT COUNT(*) FROM stock_movements WHERE {where}", params).fetchone()[0]
+            rows = db.execute(f"""SELECT id,menu_id,order_id,delta,reason,note,created_at
+                FROM stock_movements WHERE {where} ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?""",
+                [*params, page_size, (page-1)*page_size]).fetchall()
+        return dict(movements=[dict(r) for r in rows], total=count, page=page, page_size=page_size)
 
     def save_option(self, menu_id, payload):
         with self.connect() as db:
