@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from src.config import Settings
 from src.schemas import MenuList, Order, OrderInput, OrderList, OrderResult, OrderStatus, OrderUpdate, Recommendation, SalesSummary
 from src.services.face_service import FaceService
+from src.schemas import HourlySales, MenuCreate, MenuUpdate, OptionInput
 from src.storage import KST, Store, StoreError
 
 BASE = Path(__file__).resolve().parent.parent
@@ -112,26 +113,67 @@ def create_app(database_path=None):
     def create_order(payload: OrderInput):
         return {"result": "OK", "order": store.create_order(payload)}
 
+    @app.post("/api/order-quotes", tags=["customer"])
+    def quote_order(payload: OrderInput):
+        return store.quote(payload)
+
+    @app.post("/api/orders/confirm", response_model=OrderResult, tags=["customer"])
+    def confirm_order(payload: OrderInput):
+        if payload.quote_id is None:
+            raise HTTPException(422, "확인한 quote_id가 필요합니다.")
+        if payload.payment_method != "counter":
+            raise HTTPException(422, "현재는 현장 결제만 지원합니다.")
+        return {"result": "OK", "order": store.create_order(payload)}
+
+    @app.get("/api/owner/menus", response_model=MenuList, tags=["owner"], dependencies=[Depends(admin)])
+    def owner_menus():
+        return {"menus": store.menus()}
+
+    @app.post("/api/owner/menus", status_code=201, tags=["owner"], dependencies=[Depends(admin)])
+    def add_menu(payload: MenuCreate):
+        return store.add_menu(payload)
+
+    @app.patch("/api/owner/menus/{menu_id}", tags=["owner"], dependencies=[Depends(admin)])
+    def edit_menu(menu_id: str, payload: MenuUpdate):
+        return store.update_menu(menu_id, payload)
+
+    @app.post("/api/owner/menus/{menu_id}/options", tags=["owner"], dependencies=[Depends(admin)])
+    def edit_option(menu_id: str, payload: OptionInput):
+        return store.save_option(menu_id, payload)
+
+    @app.get("/api/owner/me", tags=["owner"])
     @app.get("/api/admin/me", tags=["admin"])
     def me(user=Depends(admin)):
         return {"username": user}
 
+    @app.get("/api/owner/orders", response_model=OrderList, tags=["owner"], dependencies=[Depends(admin)])
     @app.get("/api/admin/orders", response_model=OrderList, tags=["admin"], dependencies=[Depends(admin)])
     def orders(dates=Depends(period), status: Optional[OrderStatus] = None,
                page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100)):
         return store.orders(*dates, status, page, page_size)
 
+    @app.get("/api/owner/orders/{order_id}", response_model=Order, tags=["owner"], dependencies=[Depends(admin)])
     @app.get("/api/admin/orders/{order_id}", response_model=Order, tags=["admin"], dependencies=[Depends(admin)])
     def order_detail(order_id: int):
         with store.connect() as db:
             return store.read_order(db, order_id)
 
+    @app.patch("/api/owner/orders/{order_id}", response_model=Order, tags=["owner"], dependencies=[Depends(admin)])
     @app.patch("/api/admin/orders/{order_id}", response_model=Order, tags=["admin"], dependencies=[Depends(admin)])
     def update_order(order_id: int, payload: OrderUpdate):
         return store.update_order(order_id, payload)
 
+    @app.get("/api/owner/sales", response_model=SalesSummary, tags=["owner"], dependencies=[Depends(admin)])
     @app.get("/api/admin/sales", response_model=SalesSummary, tags=["admin"], dependencies=[Depends(admin)])
     def sales(dates=Depends(period)):
         return store.summary(*dates)
+
+    @app.get("/api/owner/sales/hourly", response_model=HourlySales, tags=["owner"], dependencies=[Depends(admin)])
+    def hourly_sales(dates=Depends(period), start_hour: int = Query(0, ge=0, le=23),
+                     end_hour: int = Query(24, ge=1, le=24),
+                     menu_id: Optional[str] = Query(None, min_length=1, max_length=80)):
+        if start_hour >= end_hour:
+            raise HTTPException(422, "종료 시간은 시작 시간보다 커야 합니다.")
+        return store.hourly_sales(*dates, start_hour, end_hour, menu_id)
 
     return app

@@ -12,6 +12,13 @@ class OrderItemInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     menu_id: str = Field(min_length=1, max_length=80)
     qty: int = Field(strict=True, ge=1, le=99)
+    option_ids: List[str] = Field(default_factory=list, max_length=10)
+
+    @model_validator(mode="after")
+    def distinct_options(self):
+        if len(set(self.option_ids)) != len(self.option_ids):
+            raise ValueError("옵션은 중복 선택할 수 없습니다.")
+        return self
 
 
 class OrderInput(BaseModel):
@@ -21,10 +28,11 @@ class OrderInput(BaseModel):
     payment_method: Literal["card", "voucher", "counter"] = "counter"
     age_group: Optional[AgeGroup] = None
     items: List[OrderItemInput] = Field(min_length=1, max_length=50)
+    quote_id: Optional[UUID] = None
 
     @model_validator(mode="after")
     def unique_items(self):
-        ids = [item.menu_id for item in self.items]
+        ids = [(item.menu_id, tuple(sorted(item.option_ids))) for item in self.items]
         if len(set(ids)) != len(ids):
             raise ValueError("동일한 메뉴는 하나의 항목으로 합쳐 주세요.")
         return self
@@ -48,6 +56,9 @@ class Menu(BaseModel):
     price: int
     image: str
     category: Literal["coffee", "smoothie", "tea"]
+    available: bool = True
+    stock: Optional[int] = None
+    options: List[dict] = Field(default_factory=list)
 
 
 class MenuList(BaseModel):
@@ -63,6 +74,38 @@ class OrderItem(BaseModel):
     name: str
     price: int
     qty: int
+    options: List[dict] = Field(default_factory=list)
+
+
+class MenuUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    price: Optional[int] = Field(default=None, strict=True, ge=0, le=1000000)
+    available: Optional[bool] = Field(default=None, strict=True)
+    stock: Optional[int] = Field(default=None, strict=True, ge=0, le=1000000)
+
+    @model_validator(mode="after")
+    def valid_update(self):
+        if not self.model_fields_set or any(getattr(self, k) is None for k in self.model_fields_set if k != "stock"):
+            raise ValueError("변경할 값을 입력하세요. stock의 null만 무제한을 의미합니다.")
+        return self
+
+
+class OptionInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    option_id: str = Field(pattern=r"^[a-zA-Z0-9_-]{1,80}$")
+    name: str = Field(min_length=1, max_length=100)
+    price: int = Field(strict=True, ge=0, le=1000000)
+    available: bool = Field(default=True, strict=True)
+
+
+class MenuCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    menu_id: str = Field(pattern=r"^[a-zA-Z0-9_-]{1,80}$")
+    name: str = Field(min_length=1, max_length=100)
+    price: int = Field(strict=True, ge=0, le=1000000)
+    stock: Optional[int] = Field(default=None, strict=True, ge=0, le=1000000)
+    available: bool = Field(default=True, strict=True)
 
 
 class Order(BaseModel):
@@ -110,3 +153,33 @@ class SalesSummary(BaseModel):
     revenue: int
     daily: List[SalesDay]
     top_menus: List[SalesMenu]
+
+
+class HourlyMetrics(BaseModel):
+    order_count: int
+    paid_order_count: int
+    ordered_quantity: int
+    sold_quantity: int
+    revenue: int
+
+
+class HourlyMenu(HourlyMetrics):
+    menu_id: str
+    name: str
+
+
+class SalesHour(HourlyMetrics):
+    hour: int
+    menus: List[HourlyMenu]
+
+
+class HourlySales(BaseModel):
+    timezone: Literal["Asia/Seoul"] = "Asia/Seoul"
+    basis: Literal["order_created_at"] = "order_created_at"
+    start: str
+    end: str
+    start_hour: int
+    end_hour: int
+    menu_id: Optional[str]
+    totals: HourlyMetrics
+    hours: List[SalesHour]

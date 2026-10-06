@@ -6,6 +6,7 @@ import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from src.ordering import CatalogMixin, canonical, fingerprint, initialize_catalog
 
 KST = timezone(timedelta(hours=9))
 SEED_MENUS = [
@@ -32,7 +33,7 @@ def category(menu_id):
     return "coffee"
 
 
-class Store:
+class Store(CatalogMixin):
     def __init__(self, path):
         self.path = str(path)
 
@@ -75,15 +76,20 @@ class Store:
                 CREATE INDEX IF NOT EXISTS orders_status ON orders(status);
             """)
             if db.execute("SELECT COUNT(*) FROM menus").fetchone()[0] == 0:
-                db.executemany("INSERT INTO menus VALUES (?,?,?,?,?)", [
+                db.executemany("INSERT INTO menus(menu_id,menu_index,name,price,image_path) VALUES (?,?,?,?,?)", [
                     (menu_id, index, name, price, f"images/{menu_id}.png")
                     for index, (menu_id, name, price) in enumerate(SEED_MENUS, 1)
                 ])
+            initialize_catalog(db)
 
     def menus(self):
         with self.connect() as db:
             return [dict(menu_id=row["menu_id"], name=row["name"], price=row["price"],
-                         image=f"/static/{row['image_path']}", category=category(row["menu_id"]))
+                         image=f"/static/{row['image_path']}" if row['image_path'] else "", category=category(row["menu_id"]),
+                         available=bool(row["available"]), stock=row["stock"],
+                         options=[dict(o) for o in db.execute(
+                             "SELECT option_id,name,price,available FROM menu_options WHERE menu_id=? ORDER BY option_id",
+                             (row["menu_id"],))])
                     for row in db.execute("SELECT * FROM menus ORDER BY menu_index")]
 
     def weather(self):
@@ -124,34 +130,37 @@ class Store:
             raise StoreError(404, "주문을 찾을 수 없습니다.")
         result = {key: row[key] for key in ("id", "created_at", "order_mode", "payment_method", "payment_status", "status", "total")}
         result["order_number"] = f"{row['id']:04d}"
-        result["items"] = [dict(item) for item in db.execute(
-            "SELECT menu_id,name,price,qty FROM order_items WHERE order_id=? ORDER BY rowid", (order_id,))]
+        result["items"] = [{**dict(item), "options": json.loads(item["options"])} for item in db.execute(
+            "SELECT menu_id,name,price,qty,options FROM order_items WHERE order_id=? ORDER BY line_no", (order_id,))]
         return result
 
     def create_order(self, payload):
         data = payload.model_dump(mode="json")
-        canonical = {**data, "items": sorted(data["items"], key=lambda item: item["menu_id"])}
-        digest = hashlib.sha256(json.dumps(canonical, sort_keys=True).encode()).hexdigest()
+        data = canonical(data)
+        digest = fingerprint(data)
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             existing = db.execute("SELECT id,payload_hash FROM orders WHERE request_id=?", (data["request_id"],)).fetchone()
             if existing:
                 if existing["payload_hash"] != digest:
-                    raise StoreError(409, "같은 요청 번호로 다른 주문을 보낼 수 없습니다.")
+                    legacy = {k: v for k, v in data.items() if k != "quote_id"}
+                    legacy["items"] = [{k: v for k, v in i.items() if k != "option_ids"} for i in data["items"]]
+                    legacy_digest = hashlib.sha256(json.dumps(legacy, sort_keys=True).encode()).hexdigest()
+                    if data["quote_id"] or any(i["option_ids"] for i in data["items"]) or existing["payload_hash"] != legacy_digest:
+                        raise StoreError(409, "같은 요청 번호로 다른 주문을 보낼 수 없습니다.")
                 return self.read_order(db, existing["id"])
-            items = []
-            for item in data["items"]:
-                menu = db.execute("SELECT * FROM menus WHERE menu_id=?", (item["menu_id"],)).fetchone()
-                if not menu:
-                    raise StoreError(422, "판매하지 않는 메뉴가 포함되어 있습니다.")
-                items.append((menu["menu_id"], menu["name"], menu["price"], item["qty"]))
-            total = sum(price * qty for _, _, price, qty in items)
+            snapshot = self.price_items(db, data)
+            self.validate_quote(db, data, snapshot)
+            items, total = snapshot["items"], snapshot["total"]
             cursor = db.execute("""INSERT INTO orders
                 (request_id,payload_hash,created_at,order_mode,payment_method,age_group,total)
                 VALUES (?,?,?,?,?,?,?)""", (data["request_id"], digest, datetime.now(KST).isoformat(timespec="seconds"),
                                            data["order_mode"], data["payment_method"], data["age_group"], total))
             order_id = cursor.lastrowid
-            db.executemany("INSERT INTO order_items VALUES (?,?,?,?,?)", [(order_id, *item) for item in items])
+            db.executemany("INSERT INTO order_items VALUES (?,?,?,?,?,?,?)", [
+                (order_id, n, i["menu_id"], i["name"], i["price"], i["qty"], json.dumps(i["options"]))
+                for n, i in enumerate(items)])
+            self.change_stock(db, order_id, items)
             return self.read_order(db, order_id)
 
     @staticmethod
@@ -184,6 +193,8 @@ class Store:
             if status == "completed" and payment != "paid":
                 raise StoreError(409, "결제 확인 후 주문을 완료해 주세요.")
             db.execute("UPDATE orders SET status=?,payment_status=? WHERE id=?", (status, payment, order_id))
+            if status == "cancelled" and order["status"] != "cancelled":
+                self.change_stock(db, order_id, order["items"], restore=True)
             return self.read_order(db, order_id)
 
     def summary(self, start, end):
@@ -203,3 +214,37 @@ class Store:
                 WHERE {where} AND payment_status='paid' AND status!='cancelled'
                 GROUP BY i.menu_id ORDER BY quantity DESC,i.menu_id LIMIT 10""", params)]
             return result
+
+    def hourly_sales(self, start, end, start_hour, end_hour, menu_id=None):
+        # Normalize both current KST strings and imported offset-aware timestamps.
+        local_time = "datetime(o.created_at, '+9 hours')"
+        hour = f"CAST(strftime('%H', {local_time}) AS INTEGER)"
+        where = f"{local_time} >= ? AND {local_time} < ? AND {hour} >= ? AND {hour} < ? AND o.status!='cancelled'"
+        params = [start.isoformat() + ' 00:00:00',
+                  (end + timedelta(days=1)).isoformat() + ' 00:00:00', start_hour, end_hour]
+        if menu_id is not None:
+            where += " AND i.menu_id=?"
+            params.append(menu_id)
+        metrics = """COUNT(DISTINCT o.id) order_count,
+            COUNT(DISTINCT CASE WHEN o.payment_status='paid' THEN o.id END) paid_order_count,
+            COALESCE(SUM(i.qty),0) ordered_quantity,
+            COALESCE(SUM(CASE WHEN o.payment_status='paid' THEN i.qty ELSE 0 END),0) sold_quantity,
+            COALESCE(SUM(CASE WHEN o.payment_status='paid' THEN i.price*i.qty ELSE 0 END),0) revenue"""
+        source = f"FROM orders o JOIN order_items i ON i.order_id=o.id WHERE {where}"
+        with self.connect() as db:
+            # Keep totals and breakdowns on the same read snapshot.
+            db.execute("BEGIN")
+            totals = dict(db.execute(f"SELECT {metrics} {source}", params).fetchone())
+            grouped = {row['hour']: dict(row) for row in db.execute(
+                f"SELECT {hour} hour,{metrics} {source} GROUP BY {hour}", params)}
+            menu_rows = db.execute(f"""SELECT {hour} hour,i.menu_id,MAX(i.name) name,{metrics}
+                {source} GROUP BY {hour},i.menu_id ORDER BY hour,revenue DESC,i.menu_id""", params).fetchall()
+        hours = {h: dict(hour=h, **{key: 0 for key in totals}, menus=[]) for h in range(start_hour, end_hour)}
+        for h, values in grouped.items():
+            hours[h].update(values)
+        for row in menu_rows:
+            item = dict(row)
+            h = item.pop('hour')
+            hours[h]['menus'].append(item)
+        return dict(start=start.isoformat(), end=end.isoformat(), start_hour=start_hour,
+                    end_hour=end_hour, menu_id=menu_id, totals=totals, hours=list(hours.values()))

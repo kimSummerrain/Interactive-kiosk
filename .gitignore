@@ -3,6 +3,9 @@
 .env.*
 !.env.example
 
+# Local planning and development notes
+/docs/
+
 # Python
 .venv/
 venv/
