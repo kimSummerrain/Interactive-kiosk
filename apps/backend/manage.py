@@ -1,6 +1,7 @@
 """Local-only account administration; never expose as an HTTP endpoint."""
 import argparse
 import getpass
+import json
 import os
 import sqlite3
 from pathlib import Path
@@ -17,6 +18,12 @@ def main():
     for command in ('disable-owner', 'enable-owner', 'reset-password'):
         commands.add_parser(command).add_argument('--username', required=True)
     commands.add_parser('backup').add_argument('--output', required=True)
+    for command in ('grant-membership', 'revoke-membership'):
+        membership = commands.add_parser(command)
+        membership.add_argument('--username', required=True)
+        membership.add_argument('--reason', required=True)
+    commands.add_parser('list-memberships')
+    commands.add_parser('membership-history').add_argument('--limit', type=int, default=100)
     args = parser.parse_args()
     settings = Settings.load()
     store = Store(settings.sqlite_db_path, os.getenv('STORE_ID', 'primary'), os.getenv('STORE_NAME', '기본 매장'))
@@ -28,6 +35,17 @@ def main():
             print('백업 완료. 기존 파일을 덮어쓰지 않았습니다.')
             return
         store.initialize(seed_path=BACKEND_ROOT / 'data/seed.db')
+        if args.command == 'list-memberships':
+            print(json.dumps(store.memberships(), ensure_ascii=False, indent=2))
+            return
+        if args.command == 'membership-history':
+            print(json.dumps(store.membership_history(args.limit), ensure_ascii=False, indent=2))
+            return
+        if args.command in ('grant-membership', 'revoke-membership'):
+            changed = store.change_membership(args.username, args.command == 'grant-membership',
+                                             args.reason, getpass.getuser())
+            print('매장 소속 변경 및 이력 기록 완료.' if changed else '이미 요청한 상태입니다. 변경하지 않았습니다.')
+            return
         if args.command in ('create-owner', 'reset-password'):
             password = getpass.getpass('새 비밀번호(ASCII 12~128자): ')
             if password != getpass.getpass('비밀번호 확인: '):

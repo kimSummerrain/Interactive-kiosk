@@ -33,7 +33,7 @@ def migrate_identity(db, store_id, store_name):
     """Caller owns one transaction; unknown versions must never be downgraded."""
     db.execute('CREATE TABLE IF NOT EXISTS identity_migrations(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)')
     versions = {r[0] for r in db.execute('SELECT version FROM identity_migrations')}
-    if versions - {1}:
+    if versions - {1, 2}:
         raise RuntimeError('지원하지 않는 계정 DB 버전입니다. 서버 버전을 확인하세요.')
     if 1 not in versions:
         for sql in [
@@ -54,9 +54,56 @@ def migrate_identity(db, store_id, store_name):
     bound = db.execute('SELECT store_id FROM deployment_store WHERE singleton=1').fetchone()
     if not bound or bound[0] != store_id:
         raise RuntimeError('이 DB는 다른 매장에 연결되어 있습니다. STORE_ID를 임의 변경할 수 없습니다.')
+    if 2 not in versions:
+        db.execute('''CREATE TABLE membership_audit (
+            id INTEGER PRIMARY KEY, store_id TEXT NOT NULL REFERENCES stores(id),
+            owner_id INTEGER NOT NULL REFERENCES owner_accounts(id),
+            action TEXT NOT NULL CHECK(action IN ('grant','revoke')),
+            reason TEXT NOT NULL, operator TEXT NOT NULL, created_at TEXT NOT NULL)''')
+        db.execute('INSERT INTO identity_migrations VALUES(2,?)', (datetime.now(timezone.utc).isoformat(),))
 
 
 class IdentityMixin:
+    def memberships(self):
+        with self.connect() as db:
+            return [dict(row) for row in db.execute('''SELECT a.username,a.active account_active,
+                m.active membership_active,s.id store_id,s.active store_active
+                FROM store_memberships m JOIN owner_accounts a ON a.id=m.owner_id
+                JOIN stores s ON s.id=m.store_id WHERE m.store_id=? ORDER BY a.username''', (self.store_id,))]
+
+    def change_membership(self, username, active, reason, operator):
+        reason, operator = reason.strip(), operator.strip()
+        if not reason or len(reason) > 300 or not operator or len(operator) > 200:
+            raise ValueError('변경 사유(1~300자)와 작업자(1~200자)가 필요합니다.')
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            account = db.execute('SELECT id,active FROM owner_accounts WHERE username=?', (username,)).fetchone()
+            if not account:
+                raise ValueError('계정을 찾을 수 없습니다.')
+            if active:
+                current_store = db.execute('SELECT active FROM stores WHERE id=?', (self.store_id,)).fetchone()
+                if not account['active'] or not current_store or not current_store['active']:
+                    raise ValueError('비활성 계정 또는 매장에는 소속 권한을 부여할 수 없습니다.')
+            membership = db.execute('SELECT active FROM store_memberships WHERE store_id=? AND owner_id=?',
+                                    (self.store_id, account['id'])).fetchone()
+            if (membership is not None and bool(membership['active']) == active) or (membership is None and not active):
+                return False
+            db.execute('''INSERT INTO store_memberships(store_id,owner_id,active) VALUES(?,?,?)
+                ON CONFLICT(store_id,owner_id) DO UPDATE SET active=excluded.active''',
+                (self.store_id, account['id'], int(active)))
+            db.execute('''INSERT INTO membership_audit(store_id,owner_id,action,reason,operator,created_at)
+                VALUES(?,?,?,?,?,?)''', (self.store_id, account['id'], 'grant' if active else 'revoke',
+                                        reason, operator, datetime.now(timezone.utc).isoformat()))
+            return True
+
+    def membership_history(self, limit=100):
+        if not 1 <= limit <= 1000:
+            raise ValueError('조회 개수는 1~1000입니다.')
+        with self.connect() as db:
+            return [dict(row) for row in db.execute('''SELECT h.id,a.username,h.action,h.reason,h.operator,h.created_at
+                FROM membership_audit h JOIN owner_accounts a ON a.id=h.owner_id
+                WHERE h.store_id=? ORDER BY h.id DESC LIMIT ?''', (self.store_id, limit))]
+
     def authenticate_owner(self, username, password):
         with self.connect() as db:
             row = db.execute('SELECT * FROM owner_accounts WHERE username=?', (username,)).fetchone()

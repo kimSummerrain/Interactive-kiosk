@@ -69,11 +69,30 @@ legacy 모드에서는 503이다. 비밀번호 해시·계정 내부 키는 반�
 
 비활성화/재설정은 다음 인증부터 적용한다. 이미 실행 중인 요청을 중단하지는 않는다.
 비밀번호 재설정은 계정 활성 상태를 바꾸지 않는다. 계정 공개 가입/원격 관리 API는 제공하지 않는다.
-매장 소속 추가·회수 전용 CLI는 후속 범위이며 현재 생성 명령은 서버의 현재 매장에만 연결한다.
+현재 서버 매장에 대한 소속 부여·회수 및 조회 명령:
+
+```powershell
+.venv\Scripts\python.exe apps/backend/manage.py list-memberships
+.venv\Scripts\python.exe apps/backend/manage.py revoke-membership --username owner1 --reason "운영 담당 변경"
+.venv\Scripts\python.exe apps/backend/manage.py grant-membership --username owner1 --reason "운영 담당 복귀"
+.venv\Scripts\python.exe apps/backend/manage.py membership-history --limit 100
+```
+
+등록된 계정에 대해서만 실행하며 소속 변경 대상은 현재 DB의 STORE_ID로 고정된다.
+소속 회수는 계정 삭제/비활성화와 다르며 다른 매장 소속을 변경하지 않는다.
+비활성 계정 또는 매장에는 소속을 부여할 수 없다. 부여 명령이 계정을 자동 활성화하지 않는다.
+같은 상태를 재요청하면 변경과 이력을 생략한다. 변경 사유는 앞뒤 공백 제외 1~300자다.
+소속 변경과 membership_audit의 기록은 한 트랜잭션이며 이력 저장 실패 시 권한 변경도 롤백된다.
+작업자는 로컬 OS 사용자명으로 기록한다. 이는 암호학적으로 검증된 사용자 신원이나 변조 방지 로그가 아니다.
+최초 계정 생성·계정 활성 상태·비밀번호 변경은 이 소속 변경 이력에 포함하지 않는다.
+마지막 점주의 소속 회수도 허용된다. 이 경우 로컬 운영자가 grant-membership으로 복구할 수 있다.
+이 기능은 신뢰할 수 있는 로컬 운영 명령이며 점주가 자기 권한을 올리는 HTTP API를 제공하지 않는다.
 
 ## 6. 이관·복구 정책
 
 identity_migrations 1번은 트랜잭션으로 테이블과 매장 연결을 생성한다. 실패하면 해당 단계 전체가 롤백된다.
+2번은 membership_audit 테이블을 추가한다. 버전 1 DB의 기존 계정·소속을 유지하며 반복 적용하지 않는다.
+버전 2 적용 뒤 버전 1만 지원하는 이전 서버는 시작을 거부한다. 롤백은 백업/코드 버전을 함께 복구한다.
 미지원 버전 또는 다른 STORE_ID 연결은 시작을 거부한다. 재실행은 기존 계정·거래를 유지한다.
 이 버전 관리는 새 계정 스키마 전용이며 기존 카탈로그 이관 전체를 대체하지 않는다.
 되돌릴 때는 서버를 중지하고 백업 DB와 그 시점 코드/설정을 함께 복구한다.
