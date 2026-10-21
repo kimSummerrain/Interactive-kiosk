@@ -15,6 +15,8 @@ AUTH = ("manager", "test-only-password")
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
+    monkeypatch.setenv("OWNER_AUTH_MODE", "legacy")
+    monkeypatch.setenv("STORE_ID", "primary")
     monkeypatch.setenv("ADMIN_USERNAME", AUTH[0])
     monkeypatch.setenv("ADMIN_PASSWORD", AUTH[1])
     monkeypatch.setenv("SERVE_WEB", "true")

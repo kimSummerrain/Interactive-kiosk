@@ -65,7 +65,6 @@ apps/
   frontend-app/kiosk/   고객용 키오스크 프로토타입
   frontend-web/admin/  점주 관리자 웹
   backend/             FastAPI 서버, DB, 메뉴 이미지, 테스트
-docs/                  개발 환경 및 API 연동 안내
 scripts/               로컬 실행·검증 스크립트
 .github/               PR 템플릿
 ```
@@ -78,7 +77,17 @@ Windows 개발 환경에서 백엔드를 실행하면 고객 프로토타입과 
 - 점주 웹: `http://127.0.0.1:8000/admin`
 - API 문서: `http://127.0.0.1:8000/docs`
 
-설치·환경 변수·실행·테스트·태블릿 연결 방법은 [개발 가이드](docs/development.md)를 참고하세요.
+저장소 루트에서 다음 명령으로 개발 서버를 실행합니다.
+
+```powershell
+python -m venv .venv
+.venv\Scripts\python.exe -m pip install -r apps/backend/requirements.txt
+Copy-Item apps/backend/.env.example apps/backend/.env
+# 생성한 .env에서 ADMIN_PASSWORD를 설정하세요. 기존 .env가 있으면 복사하지 않습니다.
+.venv\Scripts\python.exe -m uvicorn app:app --app-dir apps/backend --host 127.0.0.1 --port 8000 --reload
+```
+
+개인 작업 계획과 상세 개발 메모는 로컬 `docs/`에서 관리하며 Git에 포함하지 않습니다.
 커밋과 PR 작성 규칙은 [기여 가이드](CONTRIBUTING.md)에 정리되어 있습니다.
 
 ## 다음 개발 단계

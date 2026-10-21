@@ -14,6 +14,9 @@ from fastapi.staticfiles import StaticFiles
 from src.config import Settings
 from src.schemas import MenuList, Order, OrderInput, OrderList, OrderResult, OrderStatus, OrderUpdate, Recommendation, SalesSummary
 from src.services.face_service import FaceService
+from src.schemas import HourlySales, MenuCreate, MenuUpdate, OptionInput, StockMovementList, StockReason
+
+from src.exports import csv_response
 from src.storage import KST, Store, StoreError
 
 BASE = Path(__file__).resolve().parent.parent
@@ -21,7 +24,11 @@ BASE = Path(__file__).resolve().parent.parent
 
 def create_app(database_path=None):
     settings = Settings.load()
-    store = Store(database_path or settings.sqlite_db_path)
+    store = Store(database_path or settings.sqlite_db_path,
+                  os.getenv("STORE_ID", "primary"), os.getenv("STORE_NAME", "기본 매장"))
+    auth_mode = os.getenv("OWNER_AUTH_MODE", "legacy")
+    if auth_mode not in ("legacy", "database"):
+        raise ValueError("OWNER_AUTH_MODE는 legacy 또는 database여야 합니다.")
     username = os.getenv("ADMIN_USERNAME", "admin")
     password = os.getenv("ADMIN_PASSWORD", "")
     security = HTTPBasic(auto_error=False)
@@ -48,6 +55,11 @@ def create_app(database_path=None):
         return JSONResponse(status_code=exc.status, content={"detail": exc.message})
 
     def admin(credentials: Optional[HTTPBasicCredentials] = Depends(security)):
+        if auth_mode == "database":
+            owner = store.authenticate_owner(credentials.username if credentials else "",
+                                             credentials.password if credentials else "")
+            store.require_store(owner['id'])
+            return owner['username']
         if not password:
             raise HTTPException(503, "서버의 ADMIN_PASSWORD를 설정해 주세요.")
         valid_user = secrets.compare_digest((credentials.username if credentials else "").encode(), username.encode())
@@ -55,6 +67,14 @@ def create_app(database_path=None):
         if not (valid_user and valid_password):
             raise HTTPException(401, "관리자 아이디 또는 비밀번호가 올바르지 않습니다.")
         return username
+
+    @app.get("/api/owner/stores", tags=["owner"])
+    def owner_stores(credentials: Optional[HTTPBasicCredentials] = Depends(security)):
+        if auth_mode != "database":
+            raise HTTPException(503, "매장 소속 조회는 database 인증 모드에서 사용하세요.")
+        owner = store.authenticate_owner(credentials.username if credentials else "",
+                                         credentials.password if credentials else "")
+        return {"stores": store.owner_stores(owner['id']), "active_store_id": store.store_id}
 
     def period(start: Optional[date] = None, end: Optional[date] = None):
         today = datetime.now(KST).date()
@@ -112,26 +132,95 @@ def create_app(database_path=None):
     def create_order(payload: OrderInput):
         return {"result": "OK", "order": store.create_order(payload)}
 
+    @app.post("/api/order-quotes", tags=["customer"])
+    def quote_order(payload: OrderInput):
+        return store.quote(payload)
+
+    @app.post("/api/orders/confirm", response_model=OrderResult, tags=["customer"])
+    def confirm_order(payload: OrderInput):
+        if payload.quote_id is None:
+            raise HTTPException(422, "확인한 quote_id가 필요합니다.")
+        if payload.payment_method != "counter":
+            raise HTTPException(422, "현재는 현장 결제만 지원합니다.")
+        return {"result": "OK", "order": store.create_order(payload)}
+
+    @app.get("/api/owner/menus", response_model=MenuList, tags=["owner"], dependencies=[Depends(admin)])
+    def owner_menus():
+        return {"menus": store.menus()}
+
+    @app.post("/api/owner/menus", status_code=201, tags=["owner"], dependencies=[Depends(admin)])
+    def add_menu(payload: MenuCreate):
+        return store.add_menu(payload)
+
+    @app.patch("/api/owner/menus/{menu_id}", tags=["owner"], dependencies=[Depends(admin)])
+    def edit_menu(menu_id: str, payload: MenuUpdate):
+        return store.update_menu(menu_id, payload)
+
+    @app.post("/api/owner/menus/{menu_id}/options", tags=["owner"], dependencies=[Depends(admin)])
+    def edit_option(menu_id: str, payload: OptionInput):
+        return store.save_option(menu_id, payload)
+
+    @app.get("/api/owner/me", tags=["owner"])
     @app.get("/api/admin/me", tags=["admin"])
     def me(user=Depends(admin)):
         return {"username": user}
 
+    @app.get("/api/owner/orders", response_model=OrderList, tags=["owner"], dependencies=[Depends(admin)])
     @app.get("/api/admin/orders", response_model=OrderList, tags=["admin"], dependencies=[Depends(admin)])
     def orders(dates=Depends(period), status: Optional[OrderStatus] = None,
                page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100)):
         return store.orders(*dates, status, page, page_size)
 
+    @app.get("/api/owner/orders/export.csv", tags=["owner"], dependencies=[Depends(admin)],
+             responses={200: {"content": {"text/csv": {"schema": {"type": "string"}}}}})
+    def export_orders(dates=Depends(period), status: Optional[OrderStatus] = None):
+        return csv_response(f"orders-{dates[0]}-{dates[1]}.csv",
+            ['주문ID', '주문시각(KST)', '이용방식', '결제수단', '결제상태', '주문상태',
+             '메뉴ID', '메뉴명', '옵션포함단가', '수량', '항목금액', '옵션JSON'],
+            store.export_orders(*dates, status))
+
+    @app.get("/api/owner/orders/{order_id}", response_model=Order, tags=["owner"], dependencies=[Depends(admin)])
     @app.get("/api/admin/orders/{order_id}", response_model=Order, tags=["admin"], dependencies=[Depends(admin)])
     def order_detail(order_id: int):
         with store.connect() as db:
             return store.read_order(db, order_id)
 
+    @app.patch("/api/owner/orders/{order_id}", response_model=Order, tags=["owner"], dependencies=[Depends(admin)])
     @app.patch("/api/admin/orders/{order_id}", response_model=Order, tags=["admin"], dependencies=[Depends(admin)])
     def update_order(order_id: int, payload: OrderUpdate):
         return store.update_order(order_id, payload)
 
+    @app.get("/api/owner/sales", response_model=SalesSummary, tags=["owner"], dependencies=[Depends(admin)])
     @app.get("/api/admin/sales", response_model=SalesSummary, tags=["admin"], dependencies=[Depends(admin)])
     def sales(dates=Depends(period)):
         return store.summary(*dates)
+
+    @app.get("/api/owner/sales/hourly", response_model=HourlySales, tags=["owner"], dependencies=[Depends(admin)])
+    def hourly_sales(dates=Depends(period), start_hour: int = Query(0, ge=0, le=23),
+                     end_hour: int = Query(24, ge=1, le=24),
+                     menu_id: Optional[str] = Query(None, min_length=1, max_length=80)):
+        if start_hour >= end_hour:
+            raise HTTPException(422, "종료 시간은 시작 시간보다 커야 합니다.")
+        return store.hourly_sales(*dates, start_hour, end_hour, menu_id)
+
+    @app.get("/api/owner/stock-movements", response_model=StockMovementList,
+             tags=["owner"], dependencies=[Depends(admin)])
+    def stock_movements(dates=Depends(period), menu_id: Optional[str] = Query(None, min_length=1, max_length=80),
+                        reason: Optional[StockReason] = None, page: int = Query(1, ge=1),
+                        page_size: int = Query(20, ge=1, le=100)):
+        return store.stock_history(*dates, menu_id, reason, page, page_size)
+
+    @app.get("/api/owner/sales/hourly/export.csv", tags=["owner"], dependencies=[Depends(admin)],
+             responses={200: {"content": {"text/csv": {"schema": {"type": "string"}}}}})
+    def export_hourly(dates=Depends(period), start_hour: int = Query(0, ge=0, le=23),
+                      end_hour: int = Query(24, ge=1, le=24),
+                      menu_id: Optional[str] = Query(None, min_length=1, max_length=80)):
+        if start_hour >= end_hour:
+            raise HTTPException(422, "종료 시간은 시작 시간보다 커야 합니다.")
+        report = store.hourly_sales(*dates, start_hour, end_hour, menu_id)
+        return csv_response(f"hourly-sales-{dates[0]}-{dates[1]}.csv",
+            ['시작일', '종료일', '시간대(KST)', '메뉴필터', '주문건수', '결제주문건수', '주문수량', '판매수량', '결제매출'],
+            [[str(dates[0]), str(dates[1]), h['hour'], menu_id or '', h['order_count'],
+              h['paid_order_count'], h['ordered_quantity'], h['sold_quantity'], h['revenue']] for h in report['hours']])
 
     return app
