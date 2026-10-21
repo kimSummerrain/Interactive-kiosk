@@ -17,6 +17,16 @@
 | GET / PATCH | `/api/owner/orders/{order_id}` | 주문 상세 / 상태·현장 결제 확인 |
 | GET | `/api/owner/sales` | 결제 매출·일별 매출·메뉴 판매 수량 |
 | GET | `/api/owner/sales/hourly` | 시간대별 주문 건수·메뉴 수량·결제 매출 |
+| GET | `/api/owner/stock-movements` | 메뉴별 수량 조정·주문 차감·취소 복구 이력 |
+
+재고 이력 query: start/end(KST 날짜, 종료일 포함), menu_id(선택),
+reason(order/cancel/owner_adjustment, 선택), page(기본 1), page_size(기본 20, 최대 100).
+응답은 movements/total/page/page_size이며 이력은 created_at 및 id 내림차순이다.
+각 이력에는 id/menu_id/order_id/delta/reason/note/created_at(UTC)이 포함된다.
+메뉴 PATCH에서 유한 stock 변경과 함께 stock_note(1~300자)를 보낼 수 있다.
+stock_note만 수정하거나 공백만 입력하면 422, 같은 수량 저장은 이력을 만들지 않는다.
+null 수량 제한 전환에는 사유 입력을 지원하지 않아 stock_note를 보내면 422다.
+현재 최초 수량·무제한 전환의 기록은 없어 원장 합계만으로 현재 재고를 재구성할 수 없다.
 
 시간별 통계 query: start/end(날짜, 종료일 포함), start_hour(기본 0, 포함),
 end_hour(기본 24, 미포함), menu_id(선택). KST 주문 생성 시각 기준으로 같은 시간을 합산한다.

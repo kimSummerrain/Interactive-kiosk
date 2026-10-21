@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from src.config import Settings
 from src.schemas import MenuList, Order, OrderInput, OrderList, OrderResult, OrderStatus, OrderUpdate, Recommendation, SalesSummary
 from src.services.face_service import FaceService
-from src.schemas import HourlySales, MenuCreate, MenuUpdate, OptionInput
+from src.schemas import HourlySales, MenuCreate, MenuUpdate, OptionInput, StockMovementList, StockReason
 from src.storage import KST, Store, StoreError
 
 BASE = Path(__file__).resolve().parent.parent
@@ -175,5 +175,12 @@ def create_app(database_path=None):
         if start_hour >= end_hour:
             raise HTTPException(422, "종료 시간은 시작 시간보다 커야 합니다.")
         return store.hourly_sales(*dates, start_hour, end_hour, menu_id)
+
+    @app.get("/api/owner/stock-movements", response_model=StockMovementList,
+             tags=["owner"], dependencies=[Depends(admin)])
+    def stock_movements(dates=Depends(period), menu_id: Optional[str] = Query(None, min_length=1, max_length=80),
+                        reason: Optional[StockReason] = None, page: int = Query(1, ge=1),
+                        page_size: int = Query(20, ge=1, le=100)):
+        return store.stock_history(*dates, menu_id, reason, page, page_size)
 
     return app
