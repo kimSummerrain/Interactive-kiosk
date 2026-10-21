@@ -15,6 +15,8 @@ from src.config import Settings
 from src.schemas import MenuList, Order, OrderInput, OrderList, OrderResult, OrderStatus, OrderUpdate, Recommendation, SalesSummary
 from src.services.face_service import FaceService
 from src.schemas import HourlySales, MenuCreate, MenuUpdate, OptionInput, StockMovementList, StockReason
+
+from src.exports import csv_response
 from src.storage import KST, Store, StoreError
 
 BASE = Path(__file__).resolve().parent.parent
@@ -152,6 +154,14 @@ def create_app(database_path=None):
                page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100)):
         return store.orders(*dates, status, page, page_size)
 
+    @app.get("/api/owner/orders/export.csv", tags=["owner"], dependencies=[Depends(admin)],
+             responses={200: {"content": {"text/csv": {"schema": {"type": "string"}}}}})
+    def export_orders(dates=Depends(period), status: Optional[OrderStatus] = None):
+        return csv_response(f"orders-{dates[0]}-{dates[1]}.csv",
+            ['주문ID', '주문시각(KST)', '이용방식', '결제수단', '결제상태', '주문상태',
+             '메뉴ID', '메뉴명', '옵션포함단가', '수량', '항목금액', '옵션JSON'],
+            store.export_orders(*dates, status))
+
     @app.get("/api/owner/orders/{order_id}", response_model=Order, tags=["owner"], dependencies=[Depends(admin)])
     @app.get("/api/admin/orders/{order_id}", response_model=Order, tags=["admin"], dependencies=[Depends(admin)])
     def order_detail(order_id: int):
@@ -182,5 +192,18 @@ def create_app(database_path=None):
                         reason: Optional[StockReason] = None, page: int = Query(1, ge=1),
                         page_size: int = Query(20, ge=1, le=100)):
         return store.stock_history(*dates, menu_id, reason, page, page_size)
+
+    @app.get("/api/owner/sales/hourly/export.csv", tags=["owner"], dependencies=[Depends(admin)],
+             responses={200: {"content": {"text/csv": {"schema": {"type": "string"}}}}})
+    def export_hourly(dates=Depends(period), start_hour: int = Query(0, ge=0, le=23),
+                      end_hour: int = Query(24, ge=1, le=24),
+                      menu_id: Optional[str] = Query(None, min_length=1, max_length=80)):
+        if start_hour >= end_hour:
+            raise HTTPException(422, "종료 시간은 시작 시간보다 커야 합니다.")
+        report = store.hourly_sales(*dates, start_hour, end_hour, menu_id)
+        return csv_response(f"hourly-sales-{dates[0]}-{dates[1]}.csv",
+            ['시작일', '종료일', '시간대(KST)', '메뉴필터', '주문건수', '결제주문건수', '주문수량', '판매수량', '결제매출'],
+            [[str(dates[0]), str(dates[1]), h['hour'], menu_id or '', h['order_count'],
+              h['paid_order_count'], h['ordered_quantity'], h['sold_quantity'], h['revenue']] for h in report['hours']])
 
     return app

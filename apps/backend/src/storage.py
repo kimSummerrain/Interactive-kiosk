@@ -178,6 +178,21 @@ class Store(CatalogMixin):
                               [*params, page_size, (page - 1) * page_size]).fetchall()
             return dict(orders=[self.read_order(db, row["id"]) for row in rows], total=total, page=page, page_size=page_size)
 
+    def export_orders(self, start, end, status):
+        where, params = self.date_filter(start, end)
+        if status:
+            where += " AND status=?"
+            params.append(status)
+        with self.connect() as db:
+            rows = db.execute(f"""SELECT o.id,o.created_at,o.order_mode,o.payment_method,
+                o.payment_status,o.status,i.menu_id,i.name,i.price,i.qty,
+                i.price*i.qty line_total,i.options
+                FROM orders o JOIN order_items i ON i.order_id=o.id
+                WHERE {where} ORDER BY o.id DESC,i.line_no LIMIT 10001""", params).fetchall()
+        if len(rows) > 10000:
+            raise StoreError(422, "내보내기는 주문 항목 10,000행까지 가능합니다. 기간을 줄여 주세요.")
+        return [tuple(row) for row in rows]
+
     def update_order(self, order_id, changes):
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")

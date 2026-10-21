@@ -7,6 +7,12 @@
 
 ## 점주
 
+CSV 다운로드: `GET /api/owner/orders/export.csv`(start/end/status)와
+`GET /api/owner/sales/hourly/export.csv`(start/end/start_hour/end_hour/menu_id).
+점주 Basic 인증 필수, UTF-8 BOM CSV 파일이다. 주문 CSV는 항목별 행으로 최대 10,000행,
+초과 시 422이며 기간을 줄여야 한다. 시간대 CSV는 기존 JSON 통계와 같은 기준이다.
+주문 CSV는 미결제/취소도 필터에 따라 포함하므로 금액 단순 합계를 매출로 사용하지 않는다.
+
 | 메서드 | 경로 | 기능 |
 | --- | --- | --- |
 | GET | `/api/owner/me` | 인증 확인 |
