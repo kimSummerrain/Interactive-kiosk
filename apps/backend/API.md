@@ -1,5 +1,9 @@
 # 점주·고객 핵심 API
 
+계정 확장: [매장·점주 계정 전환 안내](IDENTITY.md). OWNER_AUTH_MODE=database에서는
+등록된 점주와 현재 매장 소속을 검증하며 `/api/owner/stores`로 활성 소속 매장을 조회한다.
+기본 legacy 모드는 기존 ADMIN_USERNAME/ADMIN_PASSWORD 인증을 유지한다.
+
 현재 범위는 단일 매장 개발용 API다. 실행 후 `/docs`에서 요청을 시험할 수 있다.
 점주 인증은 기존 `ADMIN_USERNAME`, `ADMIN_PASSWORD` HTTP Basic 설정을 사용한다.
 `/api/owner`는 점주 경로이고 기존 `/api/admin` 주문·매출 경로는 웹 호환을 위해 유지한다.

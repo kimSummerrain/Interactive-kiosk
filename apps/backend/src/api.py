@@ -24,7 +24,11 @@ BASE = Path(__file__).resolve().parent.parent
 
 def create_app(database_path=None):
     settings = Settings.load()
-    store = Store(database_path or settings.sqlite_db_path)
+    store = Store(database_path or settings.sqlite_db_path,
+                  os.getenv("STORE_ID", "primary"), os.getenv("STORE_NAME", "기본 매장"))
+    auth_mode = os.getenv("OWNER_AUTH_MODE", "legacy")
+    if auth_mode not in ("legacy", "database"):
+        raise ValueError("OWNER_AUTH_MODE는 legacy 또는 database여야 합니다.")
     username = os.getenv("ADMIN_USERNAME", "admin")
     password = os.getenv("ADMIN_PASSWORD", "")
     security = HTTPBasic(auto_error=False)
@@ -51,6 +55,11 @@ def create_app(database_path=None):
         return JSONResponse(status_code=exc.status, content={"detail": exc.message})
 
     def admin(credentials: Optional[HTTPBasicCredentials] = Depends(security)):
+        if auth_mode == "database":
+            owner = store.authenticate_owner(credentials.username if credentials else "",
+                                             credentials.password if credentials else "")
+            store.require_store(owner['id'])
+            return owner['username']
         if not password:
             raise HTTPException(503, "서버의 ADMIN_PASSWORD를 설정해 주세요.")
         valid_user = secrets.compare_digest((credentials.username if credentials else "").encode(), username.encode())
@@ -58,6 +67,14 @@ def create_app(database_path=None):
         if not (valid_user and valid_password):
             raise HTTPException(401, "관리자 아이디 또는 비밀번호가 올바르지 않습니다.")
         return username
+
+    @app.get("/api/owner/stores", tags=["owner"])
+    def owner_stores(credentials: Optional[HTTPBasicCredentials] = Depends(security)):
+        if auth_mode != "database":
+            raise HTTPException(503, "매장 소속 조회는 database 인증 모드에서 사용하세요.")
+        owner = store.authenticate_owner(credentials.username if credentials else "",
+                                         credentials.password if credentials else "")
+        return {"stores": store.owner_stores(owner['id']), "active_store_id": store.store_id}
 
     def period(start: Optional[date] = None, end: Optional[date] = None):
         today = datetime.now(KST).date()

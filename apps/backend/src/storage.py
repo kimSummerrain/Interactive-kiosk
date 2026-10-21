@@ -7,6 +7,7 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from src.ordering import CatalogMixin, canonical, fingerprint, initialize_catalog
+from src.identity import IdentityMixin, migrate_identity
 
 KST = timezone(timedelta(hours=9))
 SEED_MENUS = [
@@ -33,9 +34,11 @@ def category(menu_id):
     return "coffee"
 
 
-class Store(CatalogMixin):
-    def __init__(self, path):
+class Store(CatalogMixin, IdentityMixin):
+    def __init__(self, path, store_id="primary", store_name="기본 매장"):
         self.path = str(path)
+        self.store_id = store_id
+        self.store_name = store_name
 
     @contextmanager
     def connect(self):
@@ -53,6 +56,9 @@ class Store(CatalogMixin):
         target.parent.mkdir(parents=True, exist_ok=True)
         if not target.exists() and seed_path and Path(seed_path).exists():
             shutil.copy2(seed_path, target)
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            migrate_identity(db, self.store_id, self.store_name)
         with self.connect() as db:
             db.executescript("""
                 CREATE TABLE IF NOT EXISTS menus (
