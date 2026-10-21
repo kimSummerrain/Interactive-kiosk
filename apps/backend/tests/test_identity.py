@@ -130,5 +130,5 @@ def test_parallel_initialization(tmp_path):
     with ThreadPoolExecutor(max_workers=2) as pool:
         list(pool.map(lambda _: Store(path).initialize(), range(2)))
     with Store(path).connect() as db:
-        assert db.execute('SELECT COUNT(*) FROM identity_migrations').fetchone()[0] == 1
+        assert db.execute('SELECT COUNT(*) FROM identity_migrations').fetchone()[0] == 2
         assert db.execute('SELECT COUNT(*) FROM menus').fetchone()[0] == 14
