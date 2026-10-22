@@ -5,6 +5,7 @@
 
 Flutter의 공개 PR 템플릿을 참고해 프로젝트에 맞게 재작성했습니다.
 https://github.com/flutter/flutter/blob/master/.github/PULL_REQUEST_TEMPLATE.md
+핵심 결과 먼저 제시 → 파트별 짧은 요약 → 문장과 항목의 명사형 종결.
 안내 주석은 제출 전에 제거하고, 해당 없는 항목은 '해당 없음'으로 적으세요.
 -->
 
@@ -48,6 +49,6 @@ https://github.com/flutter/flutter/blob/master/.github/PULL_REQUEST_TEMPLATE.md
 ## 제출 전 확인
 
 <!-- 실제 확인한 항목만 체크하세요. -->
-- [ ] 변경 목적과 전후 동작을 설명했습니다.
-- [ ] 필요한 검증 결과 또는 미실행 사유를 기록했습니다.
-- [ ] API·DB·환경 설정과 관련 문서의 변경 필요 여부를 확인했습니다.
+- [ ] 변경 목적과 전후 동작 설명 완료
+- [ ] 검증 결과 또는 미실행 사유 기록 완료
+- [ ] API·DB·환경 설정 및 관련 문서 확인 완료
