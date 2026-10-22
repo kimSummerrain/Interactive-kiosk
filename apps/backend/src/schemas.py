@@ -192,6 +192,23 @@ class HourlySales(BaseModel):
 StockReason = Literal["order", "cancel", "owner_adjustment"]
 
 
+class DeviceName(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    name: str = Field(min_length=1, max_length=80)
+
+
+class PairingCode(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    code: str = Field(min_length=20, max_length=100)
+
+
+class SessionPreferences(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    face: bool = Field(default=False, strict=True)
+    voice: bool = Field(default=False, strict=True)
+    recommendation: bool = Field(default=False, strict=True)
+
+
 class StockMovement(BaseModel):
     id: int
     menu_id: str

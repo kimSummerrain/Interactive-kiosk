@@ -5,7 +5,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
 
-from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
@@ -17,6 +17,7 @@ from src.services.face_service import FaceService
 from src.schemas import HourlySales, MenuCreate, MenuUpdate, OptionInput, StockMovementList, StockReason
 
 from src.exports import csv_response
+from src.schemas import DeviceName, PairingCode, SessionPreferences
 from src.storage import KST, Store, StoreError
 
 BASE = Path(__file__).resolve().parent.parent
@@ -32,6 +33,15 @@ def create_app(database_path=None):
     username = os.getenv("ADMIN_USERNAME", "admin")
     password = os.getenv("ADMIN_PASSWORD", "")
     security = HTTPBasic(auto_error=False)
+    kiosk_mode = os.getenv('KIOSK_AUTH_REQUIRED', 'true').strip().lower()
+    if kiosk_mode not in ('true', 'false'):
+        raise ValueError('KIOSK_AUTH_REQUIRED는 true 또는 false여야 합니다.')
+    kiosk_required = kiosk_mode == 'true'
+
+    def customer_session(x_kiosk_session: Optional[str] = Header(None, max_length=100)):
+        if kiosk_required and not x_kiosk_session:
+            raise HTTPException(401, '키오스크 주문 세션이 필요합니다.')
+        return x_kiosk_session
 
     @asynccontextmanager
     async def lifespan(app):
@@ -43,7 +53,7 @@ def create_app(database_path=None):
     app.state.store = store
     app.add_middleware(CORSMiddleware,
                        allow_origins=[origin.strip() for origin in os.getenv("CORS_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000").split(",") if origin.strip()],
-                       allow_methods=["GET", "POST", "PATCH"], allow_headers=["Authorization", "Content-Type"])
+                       allow_methods=["GET", "POST", "PATCH"], allow_headers=["Authorization", "Content-Type", "X-Kiosk-Session", "X-Kiosk-Device"])
     app.mount("/static", StaticFiles(directory=BASE / "static"), name="static")
     serve_web = os.getenv("SERVE_WEB", "true").lower() in ("true", "1", "yes")
     if serve_web:
@@ -107,8 +117,10 @@ def create_app(database_path=None):
         return {"weather": store.weather()}
 
     @app.post("/api/recommend", response_model=Recommendation, tags=["customer"])
-    def recommend(file: UploadFile = File(...)):
+    def recommend(file: UploadFile = File(...), token=Depends(customer_session)):
         try:
+            if token is not None:
+                store.require_recommendation(token)
             if not (file.content_type or "").startswith("image/"):
                 raise HTTPException(415, "이미지 파일을 선택해 주세요.")
             image = file.file.read(10 * 1024 * 1024 + 1)
@@ -124,25 +136,63 @@ def create_app(database_path=None):
             except Exception:
                 raise HTTPException(503, "사진 추천을 잠시 사용할 수 없어요. 일반 메뉴로 주문해 주세요.")
             group = service.to_age_group(age)
+            if token is not None:
+                store.require_recommendation(token)
             return {"age_group": group, "menus": store.recommended_menus(group)}
         finally:
             file.file.close()
 
     @app.post("/api/orders", response_model=OrderResult, tags=["customer"])
-    def create_order(payload: OrderInput):
-        return {"result": "OK", "order": store.create_order(payload)}
+    def create_order(payload: OrderInput, token=Depends(customer_session)):
+        return {"result": "OK", "order": store.create_order(payload, token)}
 
     @app.post("/api/order-quotes", tags=["customer"])
-    def quote_order(payload: OrderInput):
-        return store.quote(payload)
+    def quote_order(payload: OrderInput, token=Depends(customer_session)):
+        return store.quote(payload, token)
 
     @app.post("/api/orders/confirm", response_model=OrderResult, tags=["customer"])
-    def confirm_order(payload: OrderInput):
+    def confirm_order(payload: OrderInput, token=Depends(customer_session)):
         if payload.quote_id is None:
             raise HTTPException(422, "확인한 quote_id가 필요합니다.")
         if payload.payment_method != "counter":
             raise HTTPException(422, "현재는 현장 결제만 지원합니다.")
-        return {"result": "OK", "order": store.create_order(payload)}
+        return {"result": "OK", "order": store.create_order(payload, token)}
+
+    @app.post('/api/owner/kiosks/pairing-codes', tags=['owner'], dependencies=[Depends(admin)])
+    def pairing(payload: DeviceName):
+        return store.pairing(payload.name)
+
+    @app.get('/api/owner/kiosks', tags=['owner'], dependencies=[Depends(admin)])
+    def devices():
+        return {'devices': store.devices()}
+
+    @app.post('/api/owner/kiosks/{device_id}/revoke', tags=['owner'], dependencies=[Depends(admin)])
+    def revoke(device_id: str):
+        return store.revoke_device(device_id)
+
+    @app.post('/api/kiosk/register', tags=['kiosk'])
+    def register(payload: PairingCode):
+        return store.register_device(payload.code)
+
+    @app.post('/api/kiosk/heartbeat', tags=['kiosk'])
+    def heartbeat(x_kiosk_device: str = Header(..., max_length=100)):
+        return store.heartbeat(x_kiosk_device)
+
+    @app.post('/api/kiosk/sessions', tags=['kiosk'])
+    def begin(x_kiosk_device: str = Header(..., max_length=100)):
+        return store.start_session(x_kiosk_device)
+
+    @app.patch('/api/kiosk/session/preferences', tags=['kiosk'])
+    def preferences(payload: SessionPreferences, x_kiosk_session: str = Header(..., max_length=100)):
+        return store.preferences(x_kiosk_session, payload.model_dump(exclude_unset=True))
+
+    @app.post('/api/kiosk/session/end', tags=['kiosk'])
+    def finish(x_kiosk_session: str = Header(..., max_length=100)):
+        return store.end_session(x_kiosk_session)
+
+    @app.get('/api/kiosk/orders/{order_id}', response_model=Order, tags=['kiosk'])
+    def customer_order(order_id: int, x_kiosk_session: str = Header(..., max_length=100)):
+        return store.session_order(x_kiosk_session, order_id)
 
     @app.get("/api/owner/menus", response_model=MenuList, tags=["owner"], dependencies=[Depends(admin)])
     def owner_menus():

@@ -15,6 +15,7 @@ AUTH = ("manager", "test-only-password")
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
+    monkeypatch.setenv('KIOSK_AUTH_REQUIRED', 'false')
     monkeypatch.setenv("OWNER_AUTH_MODE", "legacy")
     monkeypatch.setenv("STORE_ID", "primary")
     monkeypatch.setenv("ADMIN_USERNAME", AUTH[0])
