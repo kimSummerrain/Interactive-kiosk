@@ -84,8 +84,12 @@ python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r apps/backend/requirements.txt
 Copy-Item apps/backend/.env.example apps/backend/.env
 # 생성한 .env에서 ADMIN_PASSWORD를 설정하세요. 기존 .env가 있으면 복사하지 않습니다.
+# 기존 HTML 프로토타입 주문을 시험할 때만 KIOSK_AUTH_REQUIRED=false로 설정합니다.
 .venv\Scripts\python.exe -m uvicorn app:app --app-dir apps/backend --host 127.0.0.1 --port 8000 --reload
 ```
+
+기본 설정에서는 주문·견적·사진 추천에 등록 기기의 고객 세션이 필요합니다.
+기존 HTML 프로토타입에는 아직 세션 연동 화면이 없습니다. [기기 등록과 API 사용 순서](apps/backend/KIOSK.md)를 참고하세요.
 
 개인 작업 계획과 상세 개발 메모는 로컬 `docs/`에서 관리하며 Git에 포함하지 않습니다.
 커밋과 PR 작성 규칙은 [기여 가이드](CONTRIBUTING.md)에 정리되어 있습니다.

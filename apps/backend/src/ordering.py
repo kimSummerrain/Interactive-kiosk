@@ -137,27 +137,34 @@ class CatalogMixin:
                               qty=item["qty"], options=options))
         return dict(items=items, total=sum(i["price"] * i["qty"] for i in items))
 
-    def quote(self, payload):
+    def quote(self, payload, session_token=None):
         data = payload.model_dump(mode="json")
         if data["quote_id"] is not None:
             self.error(422, "견적 생성 시 quote_id를 지정하지 마세요.")
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
+            session = self.session(db, session_token) if session_token is not None else None
+            if session and data["payment_method"] != "counter":
+                self.error(422, "현재는 현장 결제만 지원합니다.")
             result = self.price_items(db, canonical(data))
             now = datetime.now(timezone.utc)
             expires = (now + timedelta(minutes=5)).isoformat()
             quote_id = str(uuid4())
             db.execute("DELETE FROM quotes WHERE expires_at < ?", (now.isoformat(),))
-            db.execute("INSERT INTO quotes VALUES (?,?,?,?)", (quote_id, expires, fingerprint(data),
-                                                               json.dumps(result, sort_keys=True)))
+            db.execute("INSERT INTO quotes(id,expires_at,payload_hash,snapshot,session_id) VALUES (?,?,?,?,?)",
+                       (quote_id, expires, fingerprint(data), json.dumps(result, sort_keys=True), session['id'] if session else None))
         return dict(quote_id=quote_id, expires_at=expires, **result)
 
-    def validate_quote(self, db, data, snapshot):
+    def validate_quote(self, db, data, snapshot, session_id=None):
         if not data["quote_id"]:
+            if session_id:
+                self.error(422, '견적 확인 후 주문을 확정하세요.')
             if any(i["option_ids"] for i in data["items"]):
                 self.error(422, "옵션 주문은 견적을 먼저 확인하세요.")
             return  # Compatibility for the existing kiosk prototype.
         row = db.execute("SELECT * FROM quotes WHERE id=?", (data["quote_id"],)).fetchone()
+        if row and row['session_id'] != session_id:
+            self.error(409, '다른 주문 세션의 견적입니다.')
         original = {**data, "quote_id": None}
         if not row or row["expires_at"] <= datetime.now(timezone.utc).isoformat():
             self.error(409, "견적이 만료되었습니다. 다시 확인하세요.")

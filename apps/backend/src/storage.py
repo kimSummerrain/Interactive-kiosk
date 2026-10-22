@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from src.ordering import CatalogMixin, canonical, fingerprint, initialize_catalog
 from src.identity import IdentityMixin, migrate_identity
+from src.kiosk import KioskMixin, initialize_kiosk
 
 KST = timezone(timedelta(hours=9))
 SEED_MENUS = [
@@ -34,7 +35,7 @@ def category(menu_id):
     return "coffee"
 
 
-class Store(CatalogMixin, IdentityMixin):
+class Store(CatalogMixin, IdentityMixin, KioskMixin):
     def __init__(self, path, store_id="primary", store_name="기본 매장"):
         self.path = str(path)
         self.store_id = store_id
@@ -87,6 +88,7 @@ class Store(CatalogMixin, IdentityMixin):
                     for index, (menu_id, name, price) in enumerate(SEED_MENUS, 1)
                 ])
             initialize_catalog(db)
+            initialize_kiosk(db)
 
     def menus(self):
         with self.connect() as db:
@@ -140,14 +142,20 @@ class Store(CatalogMixin, IdentityMixin):
             "SELECT menu_id,name,price,qty,options FROM order_items WHERE order_id=? ORDER BY line_no", (order_id,))]
         return result
 
-    def create_order(self, payload):
+    def create_order(self, payload, session_token=None):
         data = payload.model_dump(mode="json")
         data = canonical(data)
         digest = fingerprint(data)
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
+            session = self.session(db, session_token) if session_token is not None else None
+            if session and data["payment_method"] != "counter":
+                self.error(422, "현재는 현장 결제만 지원합니다.")
             existing = db.execute("SELECT id,payload_hash FROM orders WHERE request_id=?", (data["request_id"],)).fetchone()
             if existing:
+                link = db.execute('SELECT session_id FROM kiosk_order_links WHERE order_id=?', (existing['id'],)).fetchone()
+                if (session and (not link or link['session_id'] != session['id'])) or (not session and link):
+                    raise StoreError(409, '다른 주문 세션의 요청 번호입니다.')
                 if existing["payload_hash"] != digest:
                     legacy = {k: v for k, v in data.items() if k != "quote_id"}
                     legacy["items"] = [{k: v for k, v in i.items() if k != "option_ids"} for i in data["items"]]
@@ -156,7 +164,9 @@ class Store(CatalogMixin, IdentityMixin):
                         raise StoreError(409, "같은 요청 번호로 다른 주문을 보낼 수 없습니다.")
                 return self.read_order(db, existing["id"])
             snapshot = self.price_items(db, data)
-            self.validate_quote(db, data, snapshot)
+            self.validate_quote(db, data, snapshot, session['id'] if session else None)
+            if session and db.execute('SELECT 1 FROM kiosk_order_links WHERE session_id=?', (session['id'],)).fetchone():
+                raise StoreError(409, '이 세션은 이미 주문했습니다. 새 주문을 시작하세요.')
             items, total = snapshot["items"], snapshot["total"]
             cursor = db.execute("""INSERT INTO orders
                 (request_id,payload_hash,created_at,order_mode,payment_method,age_group,total)
@@ -167,6 +177,8 @@ class Store(CatalogMixin, IdentityMixin):
                 (order_id, n, i["menu_id"], i["name"], i["price"], i["qty"], json.dumps(i["options"]))
                 for n, i in enumerate(items)])
             self.change_stock(db, order_id, items)
+            if session:
+                db.execute('INSERT INTO kiosk_order_links VALUES(?,?)', (order_id,session['id']))
             return self.read_order(db, order_id)
 
     @staticmethod
