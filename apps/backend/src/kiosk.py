@@ -29,19 +29,29 @@ def initialize_kiosk(db):
             order_id INTEGER PRIMARY KEY REFERENCES orders(id),
             session_id TEXT NOT NULL UNIQUE REFERENCES kiosk_sessions(id))''',
         '''CREATE INDEX IF NOT EXISTS kiosk_session_device ON kiosk_sessions(device_id,ended)''',
+        '''CREATE TABLE IF NOT EXISTS kiosk_audit(
+            id INTEGER PRIMARY KEY, store_id TEXT NOT NULL REFERENCES stores(id),
+            device_id TEXT NOT NULL REFERENCES kiosk_devices(id), device_name TEXT NOT NULL,
+            action TEXT NOT NULL CHECK(action IN ('register','revoke')), operator TEXT,
+            reason TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL)''',
+        '''CREATE INDEX IF NOT EXISTS kiosk_audit_store_time ON kiosk_audit(store_id,created_at,id)''',
+        '''CREATE INDEX IF NOT EXISTS kiosk_audit_device_time ON kiosk_audit(store_id,device_id,created_at,id)''',
     ]:
         db.execute(sql)
+    if 'issued_by' not in {r[1] for r in db.execute('PRAGMA table_info(kiosk_pairings)')}:
+        db.execute('ALTER TABLE kiosk_pairings ADD COLUMN issued_by TEXT')
     if 'session_id' not in {r[1] for r in db.execute('PRAGMA table_info(quotes)')}:
         db.execute('ALTER TABLE quotes ADD COLUMN session_id TEXT REFERENCES kiosk_sessions(id)')
 
 
 class KioskMixin:
-    def pairing(self, name):
+    def pairing(self, name, operator=None):
         code = secrets.token_urlsafe(24)
         expires = (now() + timedelta(minutes=10)).isoformat()
         with self.connect() as db:
             db.execute('DELETE FROM kiosk_pairings WHERE expires_at < ?', (now().isoformat(),))
-            db.execute('INSERT INTO kiosk_pairings(code_hash,name,expires_at) VALUES(?,?,?)', (digest(code), name, expires))
+            db.execute('INSERT INTO kiosk_pairings(code_hash,name,expires_at,issued_by) VALUES(?,?,?,?)',
+                       (digest(code), name, expires, operator))
         return dict(code=code, expires_at=expires)
 
     def register_device(self, code):
@@ -57,6 +67,7 @@ class KioskMixin:
             db.execute('UPDATE kiosk_pairings SET used=1 WHERE code_hash=?', (digest(code),))
             db.execute('INSERT INTO kiosk_devices(id,store_id,name,token_hash,last_seen) VALUES(?,?,?,?,?)',
                        (device_id,self.store_id,row['name'],digest(token),now().isoformat()))
+            self.record_kiosk_event(db, device_id, row['name'], 'register', row['issued_by'])
         return dict(device_id=device_id, store_id=self.store_id, device_token=token)
 
     def device(self, db, token):
@@ -78,13 +89,52 @@ class KioskMixin:
         with self.connect() as db:
             return [dict(r) for r in db.execute('SELECT id,name,active,last_seen FROM kiosk_devices WHERE store_id=? ORDER BY name,id', (self.store_id,))]
 
-    def revoke_device(self, device_id):
+    def revoke_device(self, device_id, operator=None, reason=''):
+        reason = reason.strip()
+        if len(reason) > 300:
+            self.error(422, '회수 사유는 300자 이하로 입력해 주세요.')
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
-            if not db.execute('UPDATE kiosk_devices SET active=0 WHERE id=? AND store_id=?', (device_id,self.store_id)).rowcount:
+            device = db.execute('SELECT name,active FROM kiosk_devices WHERE id=? AND store_id=?',
+                                (device_id, self.store_id)).fetchone()
+            if not device:
                 self.error(404, '기기를 찾을 수 없습니다.')
+            if not device['active']:
+                return {'ok': True}
+            db.execute('UPDATE kiosk_devices SET active=0 WHERE id=?', (device_id,))
             db.execute('UPDATE kiosk_sessions SET ended=1,face=0,voice=0,recommendation=0 WHERE device_id=?', (device_id,))
+            self.record_kiosk_event(db, device_id, device['name'], 'revoke', operator, reason)
         return {'ok': True}
+
+    def record_kiosk_event(self, db, device_id, name, action, operator, reason=''):
+        db.execute('''INSERT INTO kiosk_audit(store_id,device_id,device_name,action,operator,reason,created_at)
+            VALUES(?,?,?,?,?,?,?)''',
+            (self.store_id, device_id, name, action, operator, reason, now().isoformat()))
+
+    def kiosk_history(self, start, end, device_id=None, action=None, page=1, page_size=20):
+        if start == datetime.min.date() or start > end or (end-start).days > 366 or end == datetime.max.date():
+            self.error(422, '조회 기간은 시작일 이후 최대 366일로 지정해 주세요.')
+        if page < 1 or not 1 <= page_size <= 100 or action not in (None, 'register', 'revoke'):
+            self.error(422, '이력 조회 조건을 확인해 주세요.')
+        seoul = timezone(timedelta(hours=9))
+        lower = datetime.combine(start, datetime.min.time(), seoul).astimezone(timezone.utc).isoformat()
+        upper = datetime.combine(end+timedelta(days=1), datetime.min.time(), seoul).astimezone(timezone.utc).isoformat()
+        where = 'store_id=? AND created_at>=? AND created_at<?'
+        params = [self.store_id, lower, upper]
+        if device_id is not None:
+            where += ' AND device_id=?'
+            params.append(device_id)
+        if action is not None:
+            where += ' AND action=?'
+            params.append(action)
+        with self.connect() as db:
+            # Count and page share one read snapshot while devices are being registered/revoked.
+            db.execute('BEGIN')
+            total = db.execute(f'SELECT COUNT(*) FROM kiosk_audit WHERE {where}', params).fetchone()[0]
+            events = [dict(row) for row in db.execute(f'''SELECT id,device_id,device_name,action,operator,reason,created_at
+                FROM kiosk_audit WHERE {where} ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?''',
+                [*params, page_size, (page-1)*page_size])]
+        return dict(events=events, total=total, page=page, page_size=page_size)
 
     def start_session(self, token):
         session_token, session_id = secrets.token_urlsafe(32), str(uuid4())

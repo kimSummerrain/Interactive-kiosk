@@ -17,7 +17,7 @@ from src.services.face_service import FaceService
 from src.schemas import HourlySales, MenuCreate, MenuUpdate, OptionInput, StockMovementList, StockReason
 
 from src.exports import csv_response
-from src.schemas import DeviceName, PairingCode, SessionPreferences
+from src.schemas import DeviceName, DeviceRevocation, KioskAction, KioskAuditList, PairingCode, SessionPreferences
 from src.storage import KST, Store, StoreError
 
 BASE = Path(__file__).resolve().parent.parent
@@ -159,16 +159,22 @@ def create_app(database_path=None):
         return {"result": "OK", "order": store.create_order(payload, token)}
 
     @app.post('/api/owner/kiosks/pairing-codes', tags=['owner'], dependencies=[Depends(admin)])
-    def pairing(payload: DeviceName):
-        return store.pairing(payload.name)
+    def pairing(payload: DeviceName, operator=Depends(admin)):
+        return store.pairing(payload.name, operator)
 
     @app.get('/api/owner/kiosks', tags=['owner'], dependencies=[Depends(admin)])
     def devices():
         return {'devices': store.devices()}
 
     @app.post('/api/owner/kiosks/{device_id}/revoke', tags=['owner'], dependencies=[Depends(admin)])
-    def revoke(device_id: str):
-        return store.revoke_device(device_id)
+    def revoke(device_id: str, payload: Optional[DeviceRevocation] = None, operator=Depends(admin)):
+        return store.revoke_device(device_id, operator, payload.reason if payload else '')
+
+    @app.get('/api/owner/kiosks/history', response_model=KioskAuditList, tags=['owner'], dependencies=[Depends(admin)])
+    def kiosk_history(dates=Depends(period), device_id: Optional[str] = Query(None, min_length=1, max_length=100),
+                      action: Optional[KioskAction] = None, page: int = Query(1, ge=1),
+                      page_size: int = Query(20, ge=1, le=100)):
+        return store.kiosk_history(*dates, device_id, action, page, page_size)
 
     @app.post('/api/kiosk/register', tags=['kiosk'])
     def register(payload: PairingCode):

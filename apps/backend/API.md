@@ -11,6 +11,9 @@
 
 ## 점주
 
+기기 등록·인증 회수 이력: `GET /api/owner/kiosks/history`. 기간·기기·작업별 필터와 페이지 조회 지원.
+회수 사유와 DB 이관 안내는 [키오스크 인증 안내](KIOSK.md) 참고.
+
 CSV 다운로드: `GET /api/owner/orders/export.csv`(start/end/status)와
 `GET /api/owner/sales/hourly/export.csv`(start/end/start_hour/end_hour/menu_id).
 점주 Basic 인증 필수, UTF-8 BOM CSV 파일이다. 주문 CSV는 항목별 행으로 최대 10,000행,

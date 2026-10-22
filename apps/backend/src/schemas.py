@@ -197,6 +197,31 @@ class DeviceName(BaseModel):
     name: str = Field(min_length=1, max_length=80)
 
 
+KioskAction = Literal["register", "revoke"]
+
+
+class DeviceRevocation(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    reason: str = Field(min_length=1, max_length=300)
+
+
+class KioskAuditEvent(BaseModel):
+    id: int
+    device_id: str
+    device_name: str
+    action: KioskAction
+    operator: Optional[str]
+    reason: str
+    created_at: datetime
+
+
+class KioskAuditList(BaseModel):
+    events: List[KioskAuditEvent]
+    total: int
+    page: int
+    page_size: int
+
+
 class PairingCode(BaseModel):
     model_config = ConfigDict(extra="forbid")
     code: str = Field(min_length=20, max_length=100)
